@@ -61,9 +61,14 @@ NON_TRANSACTION_PATTERNS = [
     re.compile(r'statement\s*(?:generated|ready|available|for)', re.IGNORECASE),
     # Mandate / auto-debit status
     re.compile(r'mandate\s*(?:revoked|failed|rejected|created|registered)', re.IGNORECASE),
+    re.compile(r'(?:autopay|auto-pay|mandate).*(?:scheduled|requested|setup)', re.IGNORECASE),
+    re.compile(r'is\s*scheduled\s*on', re.IGNORECASE),
     # Failed / declined transactions
-    re.compile(r'(?:txn|transaction)\s*(?:declined|failed|rejected)', re.IGNORECASE),
-    re.compile(r'(?:declined|failed)\s*(?:due\s*to|for)\s*(?:insufficient|wrong)', re.IGNORECASE),
+    re.compile(r'(?:txn|transaction|payment)\s*(?:of\s*(?:rs|inr|₹)[\d.,\s]*)?(?:has\s*)?(?:declined|failed|rejected)', re.IGNORECASE),
+    re.compile(r'(?:declined|failed)\s*(?:due\s*to|for|at)\s*(?:insufficient|wrong|merchant)', re.IGNORECASE),
+    # Data consumption alerts
+    re.compile(r'data\s*is\s*consumed', re.IGNORECASE),
+    re.compile(r'(?:50%|90%|100%)\s*(?:data|quota)', re.IGNORECASE),
     # KYC / verification requests (not transactions)
     re.compile(r'CKYCR|KYC\s*(?:document|update|verification|expir)', re.IGNORECASE),
     # Service alerts (Airtel, Jio recharge reminders)
@@ -203,9 +208,7 @@ async def ingest_sms(
                     continue
 
                 # === Step 4: Extract financial fields ===
-                from pipeline.extractor import (
-                    extract_transaction_fields, extract_merchant,
-                )
+                from pipeline.extractor import extract_merchant
                 from pipeline.preprocessor import (
                     extract_amount, detect_payment_rail, detect_bank,
                 )
@@ -222,6 +225,18 @@ async def ingest_sms(
                 payment_method = detect_payment_rail(sms.body)
                 direction = _detect_direction(sms.body)
 
+                # === Step 5: Classify SPENDING CATEGORY ===
+                from pipeline.category_classifier import classify_spending_category
+                spending_cat, spending_conf = classify_spending_category(
+                    sms.body, merchant, direction
+                )
+                # Use spending category instead of generic 'financial_transaction'
+                category = spending_cat
+                confidence = spending_conf
+
+                classified += 1
+                categories[category] = categories.get(category, 0) + 1
+
                 # UPI reference extraction
                 upi_ref = None
                 try:
@@ -232,11 +247,11 @@ async def ingest_sms(
                 except Exception:
                     pass
 
-                # === Step 5: Compute fingerprint ===
+                # === Step 6: Compute fingerprint ===
                 fp_string = f"{sms.sender}|{sms.body}|{sms.timestamp}"
                 fingerprint = hashlib.sha256(fp_string.encode()).hexdigest()
 
-                # === Step 6: Fraud/anomaly scoring ===
+                # === Step 7: Fraud/anomaly scoring ===
                 anomaly_score = 0.0
                 try:
                     from pipeline.fraud_detector import compute_anomaly_score
@@ -244,7 +259,7 @@ async def ingest_sms(
                 except Exception:
                     pass
 
-                # === Step 7: Insert ONLY valid transactions ===
+                # === Step 8: Insert ONLY valid transactions ===
                 try:
                     await conn.execute(
                         """INSERT INTO transactions

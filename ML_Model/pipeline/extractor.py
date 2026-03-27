@@ -15,17 +15,83 @@ from pipeline.preprocessor import (
 
 logger = logging.getLogger("finsight.pipeline.extractor")
 
-# ── Merchant extraction patterns ──
+# ── Merchant extraction patterns (ordered by specificity, most specific first) ──
 MERCHANT_PATTERNS = [
-    # "to MERCHANT" or "at MERCHANT" or "from MERCHANT"
-    re.compile(r'(?:to|at|from|paid\s+to|sent\s+to|received\s+from)\s+([A-Za-z0-9][A-Za-z0-9\s&.\'-]{1,40}?)(?:\s+(?:on|via|ref|upi|a/c|ac|\d))', re.IGNORECASE),
-    # "VPA merchant@bank"
+    # NCMC / Offline Wallet Prepaid card
+    re.compile(r'(offline\s*wallet(?:.*?)(?:prepaid(?:.*?))?(?:card)?)', re.IGNORECASE),
+    # "from PERSON NAME thru/via/through BANK" (UPI P2P)
+    re.compile(r'(?:from|received\s+from)\s+([A-Za-z][A-Za-z\s]{2,40}?)\s+(?:thru|via|through)\b', re.IGNORECASE),
+    # "to PERSON/MERCHANT" followed by various terminators
+    re.compile(r'(?:paid\s+to|sent\s+to|transferred\s+to|to)\s+([A-Za-z][A-Za-z\s&.\'-]{2,40}?)\s*(?:\s+on\b|\s+via\b|\s+ref\b|\s+thru\b|\s+upi\b|\s+a/?c\b|\s+ac\b|\s+for\b|\.\s|$)', re.IGNORECASE),
+    # "from PERSON/MERCHANT" followed by terminators
+    re.compile(r'(?:from)\s+([A-Za-z][A-Za-z\s&.\'-]{2,40}?)\s*(?:\s+on\b|\s+ref\b|\s+upi\b|\s+a/?c\b|\.\s|$)', re.IGNORECASE),
+    # "at MERCHANT" (POS transactions)
+    re.compile(r'\bat\s+([A-Za-z][A-Za-z0-9\s&.\'-]{2,40}?)\s*(?:\s+on\b|\s+ref\b|\s+for\b|\.\s|,|$)', re.IGNORECASE),
+    # VPA merchant@bank (UPI VPA)
     re.compile(r'VPA\s+([a-zA-Z0-9._-]+)@', re.IGNORECASE),
-    # "trf to MERCHANT" / "trf from MERCHANT"
-    re.compile(r'(?:trf|transfer)\s+(?:to|from)\s+([A-Za-z0-9][A-Za-z0-9\s&.\'-]{1,40}?)(?:\s|$)', re.IGNORECASE),
-    # Between hyphens in bank SMS: "Info: MERCHANT-"
-    re.compile(r'(?:Info|info|INFO)[:\s]*([A-Za-z0-9][A-Za-z0-9\s&.\'-]{2,30}?)(?:\s*-\s*|\s+(?:UPI|NEFT|IMPS))', re.IGNORECASE),
+    # "trf to/from MERCHANT"
+    re.compile(r'(?:trf|transfer)\s+(?:to|from)\s+([A-Za-z][A-Za-z0-9\s&.\'-]{2,40}?)(?:\s|$)', re.IGNORECASE),
+    # "Info: UPI/CREDIT/REF.-BANK" → extract from the info field
+    re.compile(r'Info[:\s]+UPI/(?:CREDIT|DEBIT)/(\d+)[.\s-]*([A-Z]+)', re.IGNORECASE),
+    # "for PERIOD REFERENCE" (like "for 21CM17Y APB")
+    re.compile(r'for\s+(\w+\s+[A-Z]{2,8})\b', re.IGNORECASE),
 ]
+
+# Stopwords that should never be a merchant name
+MERCHANT_STOPWORDS = {
+    'you', 'your', 'dear', 'customer', 'user', 'sir', 'madam',
+    'alert', 'notice', 'reminder', 'info', 'information',
+    'the', 'this', 'that', 'with', 'has', 'been', 'was', 'are',
+    'account', 'payment', 'transaction', 'amount', 'credited',
+    'debited', 'balance', 'available', 'bank', 'card',
+}
+
+
+def extract_merchant(text: str) -> Optional[str]:
+    """
+    Extract merchant/sender name from SMS/notification text.
+    Uses smart patterns for Indian banking SMS.
+    """
+    for pattern in MERCHANT_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            raw = match.group(1).strip()
+            # Filter out stopwords and too-short names
+            if len(raw) < 2:
+                continue
+            first_word = raw.split()[0].lower()
+            if first_word in MERCHANT_STOPWORDS:
+                continue
+            # Avoid entire SMS body fragments
+            if len(raw) > 50:
+                continue
+            return normalize_merchant(raw)
+
+    # ── Fallback: Try to extract a person name from common UPI patterns ──
+    # "from NAME thru" or "received from NAME"
+    fallback_match = re.search(
+        r'(?:from|received\s+from)\s+([A-Za-z][a-z]+(?:\s+[A-Za-z][a-z]+){0,3})',
+        text, re.IGNORECASE
+    )
+    if fallback_match:
+        raw = fallback_match.group(1).strip()
+        first_word = raw.split()[0].lower()
+        if first_word not in MERCHANT_STOPWORDS and len(raw) > 2:
+            return normalize_merchant(raw)
+
+    # ── Fallback: Bank name from the SMS tail (e.g. "-SBI", "-IPPB") ──
+    tail_match = re.search(r'-\s*([A-Z]{2,10})\s*$', text)
+    if tail_match:
+        bank_code = tail_match.group(1)
+        # Check if this is a known bank
+        from pipeline.preprocessor import BANK_SENDERS
+        for code, bank_name in BANK_SENDERS.items():
+            if code in bank_code or bank_code in code:
+                return bank_name
+        return bank_code
+
+    return None
+
 
 # ── Date patterns ──
 DATE_PATTERNS = [
@@ -64,6 +130,10 @@ MERCHANT_ALIASES = {
     'dunzo': 'Dunzo', 'rapido': 'Rapido',
     'hdfc': 'HDFC Bank', 'sbi': 'SBI', 'icici': 'ICICI Bank',
     'axis': 'Axis Bank', 'kotak': 'Kotak Mahindra Bank',
+    # Transit & NCMC
+    'offline wallet': 'Metro / Transit Wallet',
+    'offline wallet of prepaid': 'Metro / Transit Wallet',
+    'offline wallet of prepaid card': 'Metro / Transit Wallet',
 }
 
 
@@ -79,29 +149,20 @@ def normalize_merchant(raw: str) -> str:
         cleaned = re.sub(rf'\b{n}\b', '', cleaned)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
-    # Check aliases
+    # Check exact aliases
     if cleaned in MERCHANT_ALIASES:
         return MERCHANT_ALIASES[cleaned]
 
-    # Check partial matches
+    # Check partial matches (only for aliases >= 4 chars to avoid false positives)
     for alias, canonical in MERCHANT_ALIASES.items():
-        if alias in cleaned:
+        if len(alias) >= 4 and alias in cleaned:
             return canonical
 
     # Title case the cleaned name
     return raw.strip().title() if raw else "Unknown"
 
 
-def extract_merchant(text: str) -> Optional[str]:
-    """Extract merchant name from SMS/notification text."""
-    for pattern in MERCHANT_PATTERNS:
-        match = pattern.search(text)
-        if match:
-            raw = match.group(1).strip()
-            if len(raw) > 2:  # Skip very short matches
-                return normalize_merchant(raw)
 
-    return None
 
 
 def extract_transaction_date(text: str) -> Optional[str]:

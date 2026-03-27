@@ -73,30 +73,27 @@ class SmsService {
       return SyncResult(total: allSms.length, synced: 0, error: null);
     }
 
-    // Convert SMS to dataset format for the backend
-    final transactions = newSms.map((sms) {
+    // Convert SMS to correct format for /sms/ingest endpoint
+    final messages = newSms.map((sms) {
       final body = sms['body'] as String? ?? '';
       final sender = sms['sender'] as String? ?? '';
+      final timestamp = sms['timestamp'] as int? ?? DateTime.now().millisecondsSinceEpoch;
       final date = sms['date'] as String? ?? DateTime.now().toIso8601String();
-      final amount = _extractAmount(body);
-      final direction = _detectDirection(body);
 
       return {
+        'sender': sender,
+        'body': body,
+        'timestamp': timestamp,
         'date': date,
-        'description': body,
-        'amount': amount,
-        'type': direction,
-        'bank': sender,
-        'payment_method': _detectPaymentMethod(body),
       };
     }).toList();
 
     // Send to backend in batches of 50
     int totalSynced = 0;
     try {
-      for (var i = 0; i < transactions.length; i += 50) {
-        final batch = transactions.skip(i).take(50).toList();
-        await _api.ingestDataset(batch);
+      for (var i = 0; i < messages.length; i += 50) {
+        final batch = messages.skip(i).take(50).toList();
+        await _api.ingestSms(batch);
         totalSynced += batch.length;
       }
 
