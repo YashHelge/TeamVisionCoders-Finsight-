@@ -116,7 +116,7 @@ async def ingest_dataset(
                         user.user_id, fingerprint, txn.amount, txn.type,
                         merchant, txn.description,
                         txn.bank, txn.payment_method, txn.upi_ref,
-                        txn.date, category, confidence,
+                        datetime.fromisoformat(txn.date), category, confidence,
                     )
                     processed += 1
                 except Exception as e:

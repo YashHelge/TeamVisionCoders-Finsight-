@@ -7,6 +7,8 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
+from datetime import datetime
+from uuid import UUID
 
 from api.auth import CurrentUser, get_current_user
 
@@ -15,7 +17,7 @@ logger = logging.getLogger("finsight.transactions")
 
 
 class TransactionModel(BaseModel):
-    id: Optional[str] = None
+    id: Optional[UUID] = None
     user_id: Optional[str] = None
     fingerprint: Optional[str] = None
     amount: float
@@ -26,7 +28,7 @@ class TransactionModel(BaseModel):
     payment_method: Optional[str] = None
     upi_ref: Optional[str] = None
     account_last4: Optional[str] = None
-    transaction_date: str
+    transaction_date: datetime
     balance_after: Optional[float] = None
     source: str = "sms"  # sms | notification | merged | dataset
     category: str = "uncategorized"
@@ -36,7 +38,7 @@ class TransactionModel(BaseModel):
     anomaly_score: float = 0.0
     is_subscription: bool = False
     sync_mode: Optional[str] = None
-    created_at: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class TransactionListResponse(BaseModel):
@@ -136,6 +138,28 @@ async def list_transactions(
         raise HTTPException(status_code=500, detail="Failed to fetch transactions")
 
 
+@router.get("/transactions/categories")
+async def get_user_categories(
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get all unique categories used by the user."""
+    db_pool = request.app.state.db_pool
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    try:
+        async with db_pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT DISTINCT category FROM transactions WHERE user_id = $1",
+                user.user_id,
+            )
+            categories = [row["category"] for row in rows if row["category"]]
+            return {"categories": categories}
+    except Exception as e:
+        logger.error("Failed to fetch user categories: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch categories")
+
 @router.get("/transactions/{transaction_id}", response_model=TransactionModel)
 async def get_transaction(
     request: Request,
@@ -210,3 +234,62 @@ async def correct_category(
     except Exception as e:
         logger.error("Category correction failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to correct category")
+
+
+class ManualTransactionRequest(BaseModel):
+    amount: float
+    direction: str  # credit | debit
+    merchant: str
+    category: str = "uncategorized"
+    payment_method: Optional[str] = None
+    bank: Optional[str] = None
+    transaction_date: Optional[str] = None  # ISO 8601
+    notes: Optional[str] = None
+
+
+@router.post("/transactions/create")
+async def create_transaction(
+    request: Request,
+    body: ManualTransactionRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Manually create a transaction."""
+    db_pool = request.app.state.db_pool
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    import hashlib
+    fp_string = f"{user.user_id}|{body.merchant}|{body.amount}|{body.transaction_date or ''}"
+    fingerprint = hashlib.sha256(fp_string.encode()).hexdigest()
+
+    txn_date = datetime.utcnow()
+    if body.transaction_date:
+        try:
+            txn_date = datetime.fromisoformat(body.transaction_date)
+        except ValueError:
+            pass
+
+    try:
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """INSERT INTO transactions
+                (user_id, fingerprint, amount, direction, merchant, merchant_raw,
+                 bank, payment_method, transaction_date, source,
+                 category, category_confidence, sync_mode)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz,
+                        'manual', $10, 1.0, 'manual')
+                ON CONFLICT (fingerprint) DO NOTHING
+                RETURNING *""",
+                user.user_id, fingerprint, body.amount, body.direction,
+                body.merchant, body.notes or body.merchant,
+                body.bank, body.payment_method,
+                txn_date, body.category,
+            )
+            if row:
+                return {"status": "created", "transaction": dict(row)}
+            else:
+                return {"status": "duplicate"}
+    except Exception as e:
+        logger.error("Manual transaction creation failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to create transaction")
+

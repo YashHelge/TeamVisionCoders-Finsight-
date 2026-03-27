@@ -1,0 +1,24 @@
+{
+  "samples": 47,
+  "cv_accuracy": 0.5711,
+  "cv_accuracy_std": 0.1291,
+  "cv_f1_weighted": 0.5132,
+  "cv_f1_std": 0.1373,
+  "classes": [
+    "financial_alert",
+    "financial_transaction",
+    "otp",
+    "personal",
+    "promotional",
+    "spam"
+  ],
+  "class_distribution": {
+    "financial_alert": 3,
+    "financial_transaction": 17,
+    "otp": 3,
+    "personal": 17,
+    "promotional": 3,
+    "spam": 4
+  },
+  "training_date": "2026-03-27T12:31:18.053158"
+}

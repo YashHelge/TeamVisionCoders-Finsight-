@@ -23,6 +23,16 @@ class ApiService {
     return jsonDecode(res.body);
   }
 
+  // ── Categories ──
+  Future<List<String>> getUserCategories() async {
+    final res = await http.get(Uri.parse('$baseUrl/transactions/categories'), headers: _headers);
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body);
+      return (data['categories'] as List).map((e) => e.toString()).toList();
+    }
+    return [];
+  }
+
   // ── Transactions ──
   Future<Map<String, dynamic>> getTransactions({
     int page = 1, int pageSize = 20,
@@ -51,6 +61,33 @@ class ApiService {
         'new_category': newCat,
       }),
     );
+  }
+
+  Future<Map<String, dynamic>> addTransaction({
+    required double amount,
+    required String direction,
+    required String merchant,
+    required String category,
+    String? paymentMethod,
+    String? bank,
+    String? transactionDate,
+    String? notes,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/transactions/create'),
+      headers: _headers,
+      body: jsonEncode({
+        'amount': amount,
+        'direction': direction,
+        'merchant': merchant,
+        'category': category,
+        'payment_method': paymentMethod,
+        'bank': bank,
+        'transaction_date': transactionDate,
+        'notes': notes,
+      }),
+    );
+    return jsonDecode(res.body);
   }
 
   // ── Analytics ──
@@ -88,6 +125,16 @@ class ApiService {
       Uri.parse('$baseUrl/dataset/ingest'),
       headers: _headers,
       body: jsonEncode({'transactions': transactions}),
+    );
+    return jsonDecode(res.body);
+  }
+
+  // ── SMS Ingestion ──
+  Future<Map<String, dynamic>> ingestSms(List<Map<String, dynamic>> messages) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/sms/ingest'),
+      headers: _headers,
+      body: jsonEncode({'messages': messages}),
     );
     return jsonDecode(res.body);
   }

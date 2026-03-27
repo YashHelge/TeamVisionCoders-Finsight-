@@ -43,7 +43,7 @@ async def get_current_user(
 
     # Demo mode — accept a special demo token
     if token == "demo-token" and settings.ENVIRONMENT != "production":
-        return CurrentUser(user_id="demo-user-001", email="demo@finsight.app", role="demo")
+        return CurrentUser(user_id="c42f840c-4548-471b-8715-96c101accfa4", email="demo@finsight.app", role="demo")
 
     try:
         # Decode the Supabase JWT

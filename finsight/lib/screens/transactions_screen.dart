@@ -17,6 +17,7 @@ class TransactionsScreen extends StatefulWidget {
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
   List<TransactionModel> _transactions = [];
+  List<String> _customCategories = [];
   bool _loading = true;
   int _page = 1;
   bool _hasMore = true;
@@ -25,11 +26,27 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
 
+  // Combine standard and custom categories for UI selection
+  List<String> get _allCategories => {...AppConstants.categories, ..._customCategories}.toList();
+
   @override
   void initState() {
     super.initState();
+    _loadCategories();
     _loadTransactions();
     _scrollController.addListener(_onScroll);
+  }
+
+  Future<void> _loadCategories() async {
+    final api = context.read<ApiService>();
+    try {
+      final cats = await api.getUserCategories();
+      if (mounted) {
+        setState(() {
+          _customCategories = cats.where((c) => !AppConstants.categories.contains(c)).toList();
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -79,36 +96,44 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Column(
-        children: [
-          _buildHeader(),
-          _buildSearchBar(),
-          _buildFilters(),
-          Expanded(
-            child: _loading && _transactions.isEmpty
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-                : _transactions.isEmpty
-                    ? _buildEmpty()
-                    : RefreshIndicator(
-                        onRefresh: _loadTransactions,
-                        color: AppTheme.primary,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.only(bottom: 100),
-                          itemCount: _transactions.length + (_hasMore ? 1 : 0),
-                          itemBuilder: (ctx, i) {
-                            if (i >= _transactions.length) {
-                              return const Center(child: Padding(
-                                padding: EdgeInsets.all(16),
-                                child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2),
-                              ));
-                            }
-                            return _buildTxnCard(_transactions[i], i);
-                          },
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Column(
+          children: [
+            _buildHeader(),
+            _buildSearchBar(),
+            _buildFilters(),
+            Expanded(
+              child: _loading && _transactions.isEmpty
+                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                  : _transactions.isEmpty
+                      ? _buildEmpty()
+                      : RefreshIndicator(
+                          onRefresh: _loadTransactions,
+                          color: AppTheme.primary,
+                          child: ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.only(bottom: 100),
+                            itemCount: _transactions.length + (_hasMore ? 1 : 0),
+                            itemBuilder: (ctx, i) {
+                              if (i >= _transactions.length) {
+                                return const Center(child: Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2),
+                                ));
+                              }
+                              return _buildTxnCard(_transactions[i], i);
+                            },
+                          ),
                         ),
-                      ),
-          ),
-        ],
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          backgroundColor: AppTheme.primary,
+          onPressed: _showAddTransactionDialog,
+          child: const Icon(Icons.add_rounded, color: Colors.white),
+        ),
       ),
     );
   }
@@ -198,67 +223,507 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
   Widget _buildTxnCard(TransactionModel txn, int index) {
     final catIcon = AppConstants.categoryIcons[txn.category] ?? '❓';
+    final catLabel = AppConstants.categoryLabels[txn.category] ?? txn.category;
     final catColor = AppTheme.getCategoryColor(txn.category);
     final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: txn.anomalyScore > 0.7 ? AppTheme.warning.withValues(alpha: 0.5) : AppTheme.surfaceLight),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(color: catColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
-            child: Center(child: Text(catIcon, style: const TextStyle(fontSize: 20))),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(txn.merchant, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Text(AppConstants.categoryLabels[txn.category] ?? txn.category, style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-                    if (txn.paymentMethod != null) ...[
-                      const Text(' • ', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-                      Text(txn.paymentMethod!.toUpperCase(), style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+    return GestureDetector(
+      onLongPress: () => _showEditCategoryDialog(txn),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: txn.anomalyScore > 0.7 ? AppTheme.warning.withValues(alpha: 0.5) : AppTheme.surfaceLight),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(color: catColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+              child: Center(child: Text(catIcon, style: const TextStyle(fontSize: 20))),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(txn.merchant, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: catColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(catLabel, style: TextStyle(color: catColor, fontSize: 11, fontWeight: FontWeight.w500)),
+                      ),
+                      if (txn.paymentMethod != null) ...[
+                        const SizedBox(width: 6),
+                        Text(txn.paymentMethod!.toUpperCase(), style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                      ],
                     ],
+                  ),
+                  if (txn.transactionDate.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      _formatDate(txn.transactionDate),
+                      style: const TextStyle(color: AppTheme.textMuted, fontSize: 10),
+                    ),
                   ],
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  txn.isCredit ? '+${fmt.format(txn.amount)}' : '-${fmt.format(txn.amount)}',
+                  style: TextStyle(color: txn.isCredit ? AppTheme.income : AppTheme.expense, fontWeight: FontWeight.bold, fontSize: 15),
                 ),
+                if (txn.anomalyScore > 0.7)
+                  const Text('⚠️ Anomaly', style: TextStyle(color: AppTheme.warning, fontSize: 10)),
+                if (txn.rlAdjusted)
+                  const Text('✏️ Edited', style: TextStyle(color: AppTheme.accent, fontSize: 10)),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                txn.isCredit ? '+${fmt.format(txn.amount)}' : '-${fmt.format(txn.amount)}',
-                style: TextStyle(color: txn.isCredit ? AppTheme.income : AppTheme.expense, fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              if (txn.anomalyScore > 0.7)
-                const Text('⚠️ Anomaly', style: TextStyle(color: AppTheme.warning, fontSize: 10)),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     ).animate().fadeIn(duration: 200.ms, delay: (50 * (index % 10)).ms);
   }
 
+  String _formatDate(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr);
+      return DateFormat('dd MMM yyyy, hh:mm a').format(dt);
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  // ── Long-press: Edit Category (feeds RL) ──
+  void _showEditCategoryDialog(TransactionModel txn) {
+    String selectedCategory = txn.category;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setSheetState) {
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.edit_rounded, color: AppTheme.primary, size: 20),
+                    const SizedBox(width: 8),
+                    const Text('Edit Category', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                    const Spacer(),
+                    IconButton(icon: const Icon(Icons.close, color: AppTheme.textMuted, size: 20), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(txn.merchant, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                Text('Current: ${AppConstants.categoryLabels[txn.category] ?? txn.category}',
+                    style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8, runSpacing: 8,
+                  children: [
+                    ..._allCategories.map((cat) {
+                      final icon = AppConstants.categoryIcons[cat] ?? '❓';
+                      final label = AppConstants.categoryLabels[cat] ?? cat;
+                      final isSelected = selectedCategory == cat;
+                      return GestureDetector(
+                        onTap: () => setSheetState(() => selectedCategory = cat),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppTheme.primary.withValues(alpha: 0.2) : AppTheme.surfaceLight,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: isSelected ? AppTheme.primary : Colors.transparent),
+                          ),
+                          child: Text('$icon $label', style: TextStyle(
+                            color: isSelected ? AppTheme.primary : AppTheme.textSecondary, fontSize: 13, fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                          )),
+                        ),
+                      );
+                    }),
+                    GestureDetector(
+                      onTap: () async {
+                        final newCategory = await _showAddCustomCategoryDialog();
+                        if (newCategory != null && newCategory.isNotEmpty) {
+                          setSheetState(() {
+                            if (!_customCategories.contains(newCategory) && !AppConstants.categories.contains(newCategory)) {
+                              _customCategories.add(newCategory);
+                            }
+                            selectedCategory = newCategory;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceLight,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.transparent),
+                        ),
+                        child: const Text('➕ Add Custom', style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w400,
+                        )),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity, height: 48,
+                  child: ElevatedButton(
+                    onPressed: selectedCategory == txn.category ? null : () async {
+                      Navigator.pop(ctx);
+                      final api = context.read<ApiService>();
+                      try {
+                        await api.correctCategory(txn.id ?? '', txn.category, selectedCategory);
+                        // Update local state
+                        setState(() {
+                          final idx = _transactions.indexOf(txn);
+                          if (idx != -1) {
+                            _transactions[idx] = TransactionModel(
+                              id: txn.id, userId: txn.userId, fingerprint: txn.fingerprint,
+                              amount: txn.amount, direction: txn.direction, merchant: txn.merchant,
+                              merchantRaw: txn.merchantRaw, bank: txn.bank, paymentMethod: txn.paymentMethod,
+                              upiRef: txn.upiRef, accountLast4: txn.accountLast4,
+                              transactionDate: txn.transactionDate, balanceAfter: txn.balanceAfter,
+                              source: txn.source, category: selectedCategory,
+                              categoryConfidence: 1.0, rlAdjusted: true,
+                              fraudScore: txn.fraudScore, anomalyScore: txn.anomalyScore,
+                              isSubscription: txn.isSubscription, syncMode: txn.syncMode, createdAt: txn.createdAt,
+                            );
+                          }
+                        });
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('Category updated to ${AppConstants.categoryLabels[selectedCategory] ?? selectedCategory} — Model will learn from this'),
+                            backgroundColor: AppTheme.success,
+                          ));
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update category'), backgroundColor: Colors.redAccent));
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary, foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Save & Train Model', style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        });
+      },
+    );
+  }
+
+  // ── FAB: Add Manual Transaction ──
+  void _showAddTransactionDialog() {
+    final amountCtrl = TextEditingController();
+    final merchantCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    String direction = 'debit';
+    String category = 'uncategorized';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setSheetState) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.add_circle_rounded, color: AppTheme.primary, size: 22),
+                      const SizedBox(width: 8),
+                      const Text('Add Transaction', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                      const Spacer(),
+                      IconButton(icon: const Icon(Icons.close, color: AppTheme.textMuted, size: 20), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Direction toggle
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setSheetState(() => direction = 'debit'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: direction == 'debit' ? AppTheme.expense.withValues(alpha: 0.15) : AppTheme.surfaceLight,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: direction == 'debit' ? AppTheme.expense : Colors.transparent),
+                            ),
+                            child: Center(child: Text('💸 Expense', style: TextStyle(
+                              color: direction == 'debit' ? AppTheme.expense : AppTheme.textMuted, fontWeight: FontWeight.w600,
+                            ))),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setSheetState(() => direction = 'credit'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: direction == 'credit' ? AppTheme.income.withValues(alpha: 0.15) : AppTheme.surfaceLight,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: direction == 'credit' ? AppTheme.income : Colors.transparent),
+                            ),
+                            child: Center(child: Text('💰 Income', style: TextStyle(
+                              color: direction == 'credit' ? AppTheme.income : AppTheme.textMuted, fontWeight: FontWeight.w600,
+                            ))),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Amount
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      labelText: 'Amount',
+                      prefixText: '₹ ',
+                      prefixStyle: const TextStyle(color: AppTheme.primary, fontSize: 24, fontWeight: FontWeight.bold),
+                      labelStyle: const TextStyle(color: AppTheme.textMuted),
+                      filled: true, fillColor: AppTheme.surfaceLight,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Merchant
+                  TextField(
+                    controller: merchantCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Merchant / Description',
+                      labelStyle: const TextStyle(color: AppTheme.textMuted),
+                      filled: true, fillColor: AppTheme.surfaceLight,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Notes
+                  TextField(
+                    controller: notesCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Notes (optional)',
+                      labelStyle: const TextStyle(color: AppTheme.textMuted),
+                      filled: true, fillColor: AppTheme.surfaceLight,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Category
+                  const Text('Category', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6, runSpacing: 6,
+                    children: [
+                      ..._allCategories.map((cat) {
+                        final icon = AppConstants.categoryIcons[cat] ?? '❓';
+                        final label = AppConstants.categoryLabels[cat] ?? cat;
+                        final isSelected = category == cat;
+                        return GestureDetector(
+                          onTap: () => setSheetState(() => category = cat),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppTheme.primary.withValues(alpha: 0.2) : AppTheme.surfaceLight,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: isSelected ? AppTheme.primary : Colors.transparent),
+                            ),
+                            child: Text('$icon $label', style: TextStyle(
+                              color: isSelected ? AppTheme.primary : AppTheme.textMuted, fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                            )),
+                          ),
+                        );
+                      }),
+                      GestureDetector(
+                        onTap: () async {
+                          final newCategory = await _showAddCustomCategoryDialog();
+                          if (newCategory != null && newCategory.isNotEmpty) {
+                            setSheetState(() {
+                              if (!_customCategories.contains(newCategory) && !AppConstants.categories.contains(newCategory)) {
+                                _customCategories.add(newCategory);
+                              }
+                              category = newCategory;
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceLight,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.transparent),
+                          ),
+                          child: const Text('➕ Custom', style: TextStyle(
+                            color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w400,
+                          )),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Submit
+                  SizedBox(
+                    width: double.infinity, height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        final amount = double.tryParse(amountCtrl.text);
+                        if (amount == null || amount <= 0 || merchantCtrl.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Enter valid amount and merchant'), backgroundColor: Colors.redAccent),
+                          );
+                          return;
+                        }
+                        Navigator.pop(ctx);
+                        final api = context.read<ApiService>();
+                        try {
+                          await api.addTransaction(
+                            amount: amount,
+                            direction: direction,
+                            merchant: merchantCtrl.text.trim(),
+                            category: category,
+                            notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+                            transactionDate: DateTime.now().toIso8601String(),
+                          );
+                          await _loadTransactions();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: const Text('Transaction added!'),
+                              backgroundColor: AppTheme.success,
+                            ));
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to add'), backgroundColor: Colors.redAccent));
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.check_rounded, size: 20),
+                      label: const Text('Add Transaction', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary, foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
+  }
+
   Widget _buildEmpty() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.receipt_long_rounded, size: 64, color: AppTheme.textMuted),
-          SizedBox(height: 16),
-          Text('No transactions found', style: TextStyle(color: AppTheme.textMuted, fontSize: 16)),
+          const Icon(Icons.receipt_long_rounded, size: 64, color: AppTheme.textMuted),
+          const SizedBox(height: 16),
+          const Text('No transactions found', style: TextStyle(color: AppTheme.textMuted, fontSize: 16)),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: _showAddTransactionDialog,
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add Manually'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary, foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showAddCustomCategoryDialog() async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Add Custom Category', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: ctrl,
+          style: const TextStyle(color: Colors.white),
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(
+            hintText: 'e.g. Pet Care, Gaming, Freelance',
+            hintStyle: const TextStyle(color: AppTheme.textMuted),
+            filled: true,
+            fillColor: AppTheme.surfaceLight,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final raw = ctrl.text.trim();
+              if (raw.isNotEmpty) {
+                // Capitalize first letter of each word
+                final capitalized = raw.split(' ').map((word) {
+                  if (word.isEmpty) return '';
+                  return word[0].toUpperCase() + word.substring(1).toLowerCase();
+                }).join(' ');
+                Navigator.pop(ctx, capitalized);
+              } else {
+                Navigator.pop(ctx);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
+            child: const Text('Add'),
+          ),
         ],
       ),
     );

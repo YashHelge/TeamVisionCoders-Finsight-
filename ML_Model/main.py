@@ -107,6 +107,7 @@ from api.subscriptions import router as subscriptions_router
 from api.ai_chat import router as ai_chat_router
 from api.dataset import router as dataset_router
 from api.model_update import router as model_update_router
+from api.sms_ingest import router as sms_ingest_router
 
 app.include_router(auth_router, prefix="/api/v1", tags=["Auth"])
 app.include_router(sync_router, prefix="/api/v1", tags=["Sync"])
@@ -118,6 +119,7 @@ app.include_router(subscriptions_router, prefix="/api/v1", tags=["Subscriptions"
 app.include_router(ai_chat_router, prefix="/api/v1", tags=["AI Chat"])
 app.include_router(dataset_router, prefix="/api/v1", tags=["Dataset"])
 app.include_router(model_update_router, prefix="/api/v1", tags=["Model Update"])
+app.include_router(sms_ingest_router, prefix="/api/v1", tags=["SMS Ingest"])
 
 
 @app.get("/", tags=["Health"])
