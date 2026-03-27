@@ -250,7 +250,7 @@ async def ingest_sms(
                 pass
 
             # === Step 6: Compute fingerprint ===
-            fp_string = f"{sms.sender}|{sms.body}|{sms.timestamp}"
+            fp_string = f"{user.user_id}|{sms.sender}|{sms.body}|{sms.timestamp}"
             fingerprint = hashlib.sha256(fp_string.encode()).hexdigest()
 
             # === Step 7: Fraud/anomaly scoring ===

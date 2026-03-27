@@ -6,7 +6,7 @@ import 'api_service.dart';
 /// and syncs them to the FinSight backend for ML classification.
 class SmsService {
   static const _channel = MethodChannel('com.finsight/sms');
-  static const _lastSyncKey = 'sms_last_sync_timestamp';
+  static const _lastSyncKey = 'sms_last_sync_v2';
 
   final ApiService _api;
 
