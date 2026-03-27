@@ -179,87 +179,118 @@ async def ingest_sms(
     categories = {}
 
     try:
+        # === Phase 1: Rule-based Filtering & Extraction ===
+        valid_txns = []
+        for sms in body.messages:
+            # === Step 1: Classify the SMS ===
+            category = "uncategorized"
+            confidence = 0.0
+            try:
+                from pipeline.labeler import rule_based_label
+                category, confidence = rule_based_label(sms.body, sms.sender)
+                if confidence < 0.80:
+                    from pipeline.classifier import classify_text
+                    category, confidence = await classify_text(sms.body)
+            except Exception:
+                pass
+
+            classified += 1
+            categories[category] = categories.get(category, 0) + 1
+
+            # === Step 2: SKIP non-transaction SMS ===
+            if category != 'financial_transaction':
+                skipped += 1
+                continue
+
+            # === Step 3: Smart validation — is this REALLY a transaction? ===
+            if not _is_real_transaction(sms.body):
+                logger.debug("Skipped non-transaction SMS: %.80s...", sms.body)
+                skipped += 1
+                continue
+
+            # === Step 4: Extract financial fields ===
+            from pipeline.extractor import extract_merchant
+            from pipeline.preprocessor import (
+                extract_amount, detect_payment_rail, detect_bank,
+            )
+
+            amount = extract_amount(sms.body)
+
+            # Skip zero-amount or no-amount SMS
+            if not amount or amount <= 0:
+                skipped += 1
+                continue
+
+            merchant = extract_merchant(sms.body) or sms.sender
+            bank = detect_bank(sms.body, sms.sender) or sms.sender
+            payment_method = detect_payment_rail(sms.body)
+            direction = _detect_direction(sms.body)
+
+            # === Step 5: Classify SPENDING CATEGORY ===
+            from pipeline.category_classifier import classify_spending_category
+            spending_cat, spending_conf = classify_spending_category(
+                sms.body, merchant, direction
+            )
+            # Use spending category instead of generic 'financial_transaction'
+            category = spending_cat
+            confidence = spending_conf
+
+            classified += 1
+            categories[category] = categories.get(category, 0) + 1
+
+            # UPI reference extraction
+            upi_ref = None
+            try:
+                from pipeline.preprocessor import UPI_REF_PATTERN
+                upi_match = UPI_REF_PATTERN.search(sms.body)
+                if upi_match:
+                    upi_ref = upi_match.group(1)
+            except Exception:
+                pass
+
+            # === Step 6: Compute fingerprint ===
+            fp_string = f"{sms.sender}|{sms.body}|{sms.timestamp}"
+            fingerprint = hashlib.sha256(fp_string.encode()).hexdigest()
+
+            # === Step 7: Fraud/anomaly scoring ===
+            anomaly_score = 0.0
+            try:
+                from pipeline.fraud_detector import compute_anomaly_score
+                anomaly_score = compute_anomaly_score(sms.body, amount, direction)
+            except Exception:
+                pass
+                
+            valid_txns.append({
+                "sms": sms,
+                "amount": amount,
+                "direction": direction,
+                "merchant": merchant,
+                "bank": bank,
+                "payment_method": payment_method,
+                "category": category,
+                "confidence": confidence,
+                "anomaly_score": anomaly_score,
+                "fingerprint": fingerprint,
+                "upi_ref": upi_ref,
+            })
+
+        # === Phase 2: Batch LLM Extraction (100% Accurate Override) ===
+        if valid_txns:
+            try:
+                from pipeline.llm_extractor import batch_extract_llm
+                llm_results = await batch_extract_llm([t["sms"].body for t in valid_txns])
+                for t, res in zip(valid_txns, llm_results):
+                    # Override if LLM detected something useful
+                    if res.get("merchant") and res.get("merchant").lower() != "unknown":
+                        t["merchant"] = res["merchant"]
+                    if res.get("category") and res.get("category").lower() != "uncategorized":
+                        t["category"] = res["category"].lower().replace(' ', '_')
+            except Exception as e:
+                logger.error(f"Batch LLM extraction failed: {e}", exc_info=True)
+
+        # === Phase 3: DB Insertion ===
         async with db_pool.acquire() as conn:
-            for sms in body.messages:
-                # === Step 1: Classify the SMS ===
-                category = "uncategorized"
-                confidence = 0.0
-                try:
-                    from pipeline.labeler import rule_based_label
-                    category, confidence = rule_based_label(sms.body, sms.sender)
-                    if confidence < 0.80:
-                        from pipeline.classifier import classify_text
-                        category, confidence = await classify_text(sms.body)
-                except Exception:
-                    pass
-
-                classified += 1
-                categories[category] = categories.get(category, 0) + 1
-
-                # === Step 2: SKIP non-transaction SMS ===
-                if category != 'financial_transaction':
-                    skipped += 1
-                    continue
-
-                # === Step 3: Smart validation — is this REALLY a transaction? ===
-                if not _is_real_transaction(sms.body):
-                    logger.debug("Skipped non-transaction SMS: %.80s...", sms.body)
-                    skipped += 1
-                    continue
-
-                # === Step 4: Extract financial fields ===
-                from pipeline.extractor import extract_merchant
-                from pipeline.preprocessor import (
-                    extract_amount, detect_payment_rail, detect_bank,
-                )
-
-                amount = extract_amount(sms.body)
-
-                # Skip zero-amount or no-amount SMS
-                if not amount or amount <= 0:
-                    skipped += 1
-                    continue
-
-                merchant = extract_merchant(sms.body) or sms.sender
-                bank = detect_bank(sms.body, sms.sender) or sms.sender
-                payment_method = detect_payment_rail(sms.body)
-                direction = _detect_direction(sms.body)
-
-                # === Step 5: Classify SPENDING CATEGORY ===
-                from pipeline.category_classifier import classify_spending_category
-                spending_cat, spending_conf = classify_spending_category(
-                    sms.body, merchant, direction
-                )
-                # Use spending category instead of generic 'financial_transaction'
-                category = spending_cat
-                confidence = spending_conf
-
-                classified += 1
-                categories[category] = categories.get(category, 0) + 1
-
-                # UPI reference extraction
-                upi_ref = None
-                try:
-                    from pipeline.preprocessor import UPI_REF_PATTERN
-                    upi_match = UPI_REF_PATTERN.search(sms.body)
-                    if upi_match:
-                        upi_ref = upi_match.group(1)
-                except Exception:
-                    pass
-
-                # === Step 6: Compute fingerprint ===
-                fp_string = f"{sms.sender}|{sms.body}|{sms.timestamp}"
-                fingerprint = hashlib.sha256(fp_string.encode()).hexdigest()
-
-                # === Step 7: Fraud/anomaly scoring ===
-                anomaly_score = 0.0
-                try:
-                    from pipeline.fraud_detector import compute_anomaly_score
-                    anomaly_score = compute_anomaly_score(sms.body, amount, direction)
-                except Exception:
-                    pass
-
-                # === Step 8: Insert ONLY valid transactions ===
+            for t in valid_txns:
                 try:
                     await conn.execute(
                         """INSERT INTO transactions
@@ -269,10 +300,10 @@ async def ingest_sms(
                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz,
                                 'sms', $11, $12, $13, 'realtime')
                         ON CONFLICT (fingerprint) DO NOTHING""",
-                        user.user_id, fingerprint, amount, direction,
-                        merchant, sms.body,
-                        bank, payment_method, upi_ref,
-                        datetime.fromisoformat(sms.date), category, confidence, anomaly_score,
+                        user.user_id, t["fingerprint"], t["amount"], t["direction"],
+                        t["merchant"], t["sms"].body,
+                        t["bank"], t["payment_method"], t["upi_ref"],
+                        datetime.fromisoformat(t["sms"].date), t["category"], t["confidence"], t["anomaly_score"],
                     )
                     processed += 1
                 except Exception as e:

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 
 /// AuthService — Handles Supabase Auth (signup, login, logout, session).
@@ -118,6 +119,11 @@ class AuthService extends ChangeNotifier {
     } catch (_) {}
 
     await _storage.deleteAll();
+    
+    // Clear last sync timestamps and any other local prefs
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
     _accessToken = null;
     _refreshToken = null;
     _userId = null;
