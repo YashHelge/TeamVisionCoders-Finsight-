@@ -47,7 +47,7 @@ class FinSightApp extends StatelessWidget {
     return MaterialApp(
       title: 'FinSight',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
       home: const AppEntry(),
     );
   }
@@ -76,7 +76,7 @@ class _AppEntryState extends State<AppEntry> {
   }
 
   void _onAuthSuccess() {
-    setState(() {}); // Rebuild to show permissions or main nav
+    setState(() {});
   }
 
   Future<void> _onPermissionsComplete() async {
@@ -91,15 +91,24 @@ class _AppEntryState extends State<AppEntry> {
       builder: (context, auth, _) {
         // 1. Loading
         if (auth.loading) {
-          return const Scaffold(
+          return Scaffold(
             backgroundColor: AppTheme.background,
             body: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(color: AppTheme.primary),
-                  SizedBox(height: 16),
-                  Text('FinSight', style: TextStyle(color: AppTheme.textPrimary, fontSize: 24, fontWeight: FontWeight.w800)),
+                  Container(
+                    width: 72, height: 72,
+                    decoration: AppTheme.neoCard(radius: 20),
+                    child: const Icon(Icons.account_balance_wallet_rounded, color: AppTheme.primary, size: 36),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('FinSight', style: TextStyle(color: AppTheme.textPrimary, fontSize: 26, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: 28, height: 28,
+                    child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2.5),
+                  ),
                 ],
               ),
             ),
@@ -156,12 +165,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Future<void> _autoSync() async {
+    final auth = context.read<AuthService>();
     setState(() {
       _syncing = true;
       _syncStatus = 'Scanning SMS inbox...';
     });
 
-    final result = await _smsService.syncSmsToBackend(months: 6);
+    final result = await _smsService.syncSmsToBackend(
+      months: 6,
+      userId: auth.userId,
+    );
 
     setState(() {
       _syncing = false;
@@ -194,35 +207,43 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
 
     return Scaffold(
+      backgroundColor: AppTheme.background,
       body: Column(
         children: [
           // Sync status bar
           if (_syncStatus != null || _syncing)
             Container(
               width: double.infinity,
-              padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 4, 16, 8),
+              padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 6, 20, 10),
               decoration: BoxDecoration(
-                color: _syncing ? AppTheme.primary.withValues(alpha: 0.15) : AppTheme.surface,
+                color: _syncing ? AppTheme.primary.withValues(alpha: 0.06) : AppTheme.surface,
+                border: Border(bottom: BorderSide(color: AppTheme.surfaceDimmed, width: 1)),
               ),
               child: Row(
                 children: [
                   if (_syncing)
                     const SizedBox(
-                      width: 14,
-                      height: 14,
+                      width: 14, height: 14,
                       child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2),
                     ),
                   if (_syncing) const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       _syncStatus ?? 'Syncing...',
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                   ),
                   if (!_syncing)
                     GestureDetector(
                       onTap: _autoSync,
-                      child: const Icon(Icons.refresh_rounded, color: AppTheme.primary, size: 18),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.refresh_rounded, color: AppTheme.primary, size: 18),
+                      ),
                     ),
                 ],
               ),
@@ -239,21 +260,62 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppTheme.surface,
-          border: Border(
-            top: BorderSide(color: AppTheme.surfaceLight, width: 0.5),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFD1D9E6).withValues(alpha: 0.4),
+              offset: const Offset(0, -4),
+              blurRadius: 16,
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: Container(
+            height: 64,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _navItem(Icons.home_rounded, 'Home', 0),
+                _navItem(Icons.receipt_long_rounded, 'Txns', 1),
+                _navItem(Icons.analytics_rounded, 'Analytics', 2),
+                _navItem(Icons.subscriptions_rounded, 'Subs', 3),
+                _navItem(Icons.smart_toy_rounded, 'AI', 4),
+                _navItem(Icons.person_rounded, 'Profile', 5),
+              ],
+            ),
           ),
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Transactions'),
-            BottomNavigationBarItem(icon: Icon(Icons.analytics_rounded), label: 'Analytics'),
-            BottomNavigationBarItem(icon: Icon(Icons.subscriptions_rounded), label: 'Subscriptions'),
-            BottomNavigationBarItem(icon: Icon(Icons.smart_toy_rounded), label: 'AI Chat'),
-            BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+      ),
+    );
+  }
+
+  Widget _navItem(IconData icon, String label, int index) {
+    final selected = _currentIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => _currentIndex = index),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: selected
+            ? BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+              )
+            : null,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: selected ? AppTheme.primary : AppTheme.textMuted, size: 22),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? AppTheme.primary : AppTheme.textMuted,
+                fontSize: 10,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
           ],
         ),
       ),

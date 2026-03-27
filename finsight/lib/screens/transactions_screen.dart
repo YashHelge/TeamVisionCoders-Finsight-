@@ -26,7 +26,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
 
-  // Combine standard and custom categories for UI selection
   List<String> get _allCategories => {...AppConstants.categories, ..._customCategories}.toList();
 
   @override
@@ -97,7 +96,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppTheme.background,
         body: Column(
           children: [
             _buildHeader(),
@@ -105,7 +104,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             _buildFilters(),
             Expanded(
               child: _loading && _transactions.isEmpty
-                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                  ? _buildLoadingShimmer()
                   : _transactions.isEmpty
                       ? _buildEmpty()
                       : RefreshIndicator(
@@ -129,12 +128,28 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             ),
           ],
         ),
-        floatingActionButton: FloatingActionButton(
-          backgroundColor: AppTheme.primary,
-          onPressed: _showAddTransactionDialog,
-          child: const Icon(Icons.add_rounded, color: Colors.white),
+        floatingActionButton: Container(
+          decoration: AppTheme.neoCard(radius: 16),
+          child: FloatingActionButton(
+            backgroundColor: AppTheme.primary,
+            elevation: 0,
+            onPressed: _showAddTransactionDialog,
+            child: const Icon(Icons.add_rounded, color: Colors.white),
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLoadingShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: List.generate(6, (i) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Container(height: 74, decoration: AppTheme.neoCard(radius: 14)),
+        )),
+      ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 1200.ms, color: AppTheme.surfaceDimmed.withValues(alpha: 0.5)),
     );
   }
 
@@ -145,7 +160,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         children: [
           Text('Transactions', style: Theme.of(context).textTheme.displayMedium),
           const Spacer(),
-          Text('${_transactions.length} items', style: const TextStyle(color: AppTheme.textMuted)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: AppTheme.accentCard(color: AppTheme.primary, radius: 10),
+            child: Text('${_transactions.length}', style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w700, fontSize: 14)),
+          ),
         ],
       ),
     );
@@ -154,19 +173,26 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: TextField(
-        controller: _searchController,
-        onSubmitted: (_) => _loadTransactions(),
-        style: const TextStyle(color: Colors.white),
-        decoration: InputDecoration(
-          hintText: 'Search merchants...',
-          prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textMuted),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear, color: AppTheme.textMuted, size: 18),
-                  onPressed: () { _searchController.clear(); _loadTransactions(); },
-                )
-              : null,
+      child: Container(
+        decoration: AppTheme.neoInset(radius: 14),
+        child: TextField(
+          controller: _searchController,
+          onSubmitted: (_) => _loadTransactions(),
+          style: const TextStyle(color: AppTheme.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'Search merchants...',
+            hintStyle: const TextStyle(color: AppTheme.textMuted),
+            prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textMuted),
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, color: AppTheme.textMuted, size: 18),
+                    onPressed: () { _searchController.clear(); _loadTransactions(); },
+                  )
+                : null,
+            filled: true,
+            fillColor: Colors.transparent,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+          ),
         ),
       ),
     );
@@ -196,11 +222,15 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: FilterChip(
-        label: Text(label, style: TextStyle(fontSize: 12, color: selected ? Colors.white : AppTheme.textSecondary)),
+        label: Text(label, style: TextStyle(
+          fontSize: 12,
+          color: selected ? AppTheme.primary : AppTheme.textSecondary,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+        )),
         selected: selected,
-        selectedColor: AppTheme.primary.withValues(alpha: 0.3),
-        backgroundColor: AppTheme.surfaceLight,
-        side: BorderSide(color: selected ? AppTheme.primary : Colors.transparent),
+        selectedColor: AppTheme.primary.withValues(alpha: 0.12),
+        backgroundColor: AppTheme.surface,
+        side: BorderSide(color: selected ? AppTheme.primary.withValues(alpha: 0.3) : AppTheme.surfaceDimmed),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         onSelected: (_) {
           setState(() {
@@ -231,17 +261,19 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       onLongPress: () => _showEditCategoryDialog(txn),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: txn.anomalyScore > 0.7 ? AppTheme.warning.withValues(alpha: 0.5) : AppTheme.surfaceLight),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: txn.anomalyScore > 0.7 ? AppTheme.warning.withValues(alpha: 0.4) : AppTheme.surfaceDimmed,
+          ),
         ),
         child: Row(
           children: [
             Container(
               width: 44, height: 44,
-              decoration: BoxDecoration(color: catColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+              decoration: AppTheme.accentCard(color: catColor, radius: 12),
               child: Center(child: Text(catIcon, style: const TextStyle(fontSize: 20))),
             ),
             const SizedBox(width: 14),
@@ -249,30 +281,27 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(txn.merchant, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
+                  Text(txn.merchant, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 3),
                   Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: catColor.withValues(alpha: 0.1),
+                          color: catColor.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(catLabel, style: TextStyle(color: catColor, fontSize: 11, fontWeight: FontWeight.w500)),
+                        child: Text(catLabel, style: TextStyle(color: catColor, fontSize: 10, fontWeight: FontWeight.w500)),
                       ),
                       if (txn.paymentMethod != null) ...[
                         const SizedBox(width: 6),
-                        Text(txn.paymentMethod!.toUpperCase(), style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                        Text(txn.paymentMethod!.toUpperCase(), style: const TextStyle(color: AppTheme.textMuted, fontSize: 10)),
                       ],
                     ],
                   ),
                   if (txn.transactionDate.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    Text(
-                      _formatDate(txn.transactionDate),
-                      style: const TextStyle(color: AppTheme.textMuted, fontSize: 10),
-                    ),
+                    Text(_formatDate(txn.transactionDate), style: const TextStyle(color: AppTheme.textMuted, fontSize: 10)),
                   ],
                 ],
               ),
@@ -287,13 +316,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 if (txn.anomalyScore > 0.7)
                   const Text('⚠️ Anomaly', style: TextStyle(color: AppTheme.warning, fontSize: 10)),
                 if (txn.rlAdjusted)
-                  const Text('✏️ Edited', style: TextStyle(color: AppTheme.accent, fontSize: 10)),
+                  const Text('✏️ Edited', style: TextStyle(color: AppTheme.primary, fontSize: 10)),
               ],
             ),
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 200.ms, delay: (50 * (index % 10)).ms);
+    ).animate().fadeIn(duration: 200.ms, delay: (40 * (index % 10)).ms);
   }
 
   String _formatDate(String dateStr) {
@@ -305,18 +334,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
   }
 
-  // ── Long-press: Edit Category (feeds RL) ──
   void _showEditCategoryDialog(TransactionModel txn) {
     String selectedCategory = txn.category;
 
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setSheetState) {
           return Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,15 +353,20 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   children: [
                     const Icon(Icons.edit_rounded, color: AppTheme.primary, size: 20),
                     const SizedBox(width: 8),
-                    const Text('Edit Category', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                    const Text('Edit Category', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
                     const Spacer(),
-                    IconButton(icon: const Icon(Icons.close, color: AppTheme.textMuted, size: 20), onPressed: () => Navigator.pop(ctx)),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: AppTheme.neoCard(radius: 10),
+                        child: const Icon(Icons.close, color: AppTheme.textMuted, size: 18),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(txn.merchant, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
-                Text('Current: ${AppConstants.categoryLabels[txn.category] ?? txn.category}',
-                    style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
                 const SizedBox(height: 16),
                 Wrap(
                   spacing: 8, runSpacing: 8,
@@ -347,12 +380,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
-                            color: isSelected ? AppTheme.primary.withValues(alpha: 0.2) : AppTheme.surfaceLight,
+                            color: isSelected ? AppTheme.primary.withValues(alpha: 0.1) : AppTheme.surfaceRaised,
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: isSelected ? AppTheme.primary : Colors.transparent),
+                            border: Border.all(color: isSelected ? AppTheme.primary : AppTheme.surfaceDimmed),
                           ),
                           child: Text('$icon $label', style: TextStyle(
-                            color: isSelected ? AppTheme.primary : AppTheme.textSecondary, fontSize: 13, fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                            color: isSelected ? AppTheme.primary : AppTheme.textSecondary, fontSize: 13,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                           )),
                         ),
                       );
@@ -372,13 +406,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: AppTheme.surfaceLight,
+                          color: AppTheme.surfaceRaised,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.transparent),
+                          border: Border.all(color: AppTheme.surfaceDimmed),
                         ),
-                        child: const Text('➕ Add Custom', style: TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w400,
-                        )),
+                        child: const Text('➕ Add Custom', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
                       ),
                     ),
                   ],
@@ -392,7 +424,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       final api = context.read<ApiService>();
                       try {
                         await api.correctCategory(txn.id ?? '', txn.category, selectedCategory);
-                        // Update local state
                         setState(() {
                           final idx = _transactions.indexOf(txn);
                           if (idx != -1) {
@@ -411,7 +442,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         });
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: Text('Category updated to ${AppConstants.categoryLabels[selectedCategory] ?? selectedCategory} — Model will learn from this'),
+                            content: Text('Category updated to ${AppConstants.categoryLabels[selectedCategory] ?? selectedCategory}'),
                             backgroundColor: AppTheme.success,
                           ));
                         }
@@ -423,12 +454,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primary, foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
                     ),
                     child: const Text('Save & Train Model', style: TextStyle(fontWeight: FontWeight.w600)),
                   ),
                 ),
-                const SizedBox(height: 8),
               ],
             ),
           );
@@ -437,7 +468,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     );
   }
 
-  // ── FAB: Add Manual Transaction ──
   void _showAddTransactionDialog() {
     final amountCtrl = TextEditingController();
     final merchantCtrl = TextEditingController();
@@ -449,11 +479,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setSheetState) {
           return Padding(
-            padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
+            padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -463,12 +493,19 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     children: [
                       const Icon(Icons.add_circle_rounded, color: AppTheme.primary, size: 22),
                       const SizedBox(width: 8),
-                      const Text('Add Transaction', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                      const Text('Add Transaction', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
                       const Spacer(),
-                      IconButton(icon: const Icon(Icons.close, color: AppTheme.textMuted, size: 20), onPressed: () => Navigator.pop(ctx)),
+                      GestureDetector(
+                        onTap: () => Navigator.pop(ctx),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: AppTheme.neoCard(radius: 10),
+                          child: const Icon(Icons.close, color: AppTheme.textMuted, size: 18),
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
 
                   // Direction toggle
                   Row(
@@ -479,9 +516,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: direction == 'debit' ? AppTheme.expense.withValues(alpha: 0.15) : AppTheme.surfaceLight,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: direction == 'debit' ? AppTheme.expense : Colors.transparent),
+                              color: direction == 'debit' ? AppTheme.expense.withValues(alpha: 0.08) : AppTheme.surfaceRaised,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: direction == 'debit' ? AppTheme.expense.withValues(alpha: 0.3) : AppTheme.surfaceDimmed),
                             ),
                             child: Center(child: Text('💸 Expense', style: TextStyle(
                               color: direction == 'debit' ? AppTheme.expense : AppTheme.textMuted, fontWeight: FontWeight.w600,
@@ -496,9 +533,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: direction == 'credit' ? AppTheme.income.withValues(alpha: 0.15) : AppTheme.surfaceLight,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: direction == 'credit' ? AppTheme.income : Colors.transparent),
+                              color: direction == 'credit' ? AppTheme.income.withValues(alpha: 0.08) : AppTheme.surfaceRaised,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: direction == 'credit' ? AppTheme.income.withValues(alpha: 0.3) : AppTheme.surfaceDimmed),
                             ),
                             child: Center(child: Text('💰 Income', style: TextStyle(
                               color: direction == 'credit' ? AppTheme.income : AppTheme.textMuted, fontWeight: FontWeight.w600,
@@ -510,49 +547,43 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Amount
                   TextField(
                     controller: amountCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 24, fontWeight: FontWeight.bold),
                     decoration: InputDecoration(
                       labelText: 'Amount',
                       prefixText: '₹ ',
                       prefixStyle: const TextStyle(color: AppTheme.primary, fontSize: 24, fontWeight: FontWeight.bold),
                       labelStyle: const TextStyle(color: AppTheme.textMuted),
-                      filled: true, fillColor: AppTheme.surfaceLight,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      filled: true, fillColor: AppTheme.surfaceRaised,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 12),
-
-                  // Merchant
                   TextField(
                     controller: merchantCtrl,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: AppTheme.textPrimary),
                     decoration: InputDecoration(
                       labelText: 'Merchant / Description',
                       labelStyle: const TextStyle(color: AppTheme.textMuted),
-                      filled: true, fillColor: AppTheme.surfaceLight,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      filled: true, fillColor: AppTheme.surfaceRaised,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 12),
-
-                  // Notes
                   TextField(
                     controller: notesCtrl,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: AppTheme.textPrimary),
                     decoration: InputDecoration(
                       labelText: 'Notes (optional)',
                       labelStyle: const TextStyle(color: AppTheme.textMuted),
-                      filled: true, fillColor: AppTheme.surfaceLight,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      filled: true, fillColor: AppTheme.surfaceRaised,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 16),
 
-                  // Category
                   const Text('Category', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
                   const SizedBox(height: 8),
                   Wrap(
@@ -567,9 +598,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
-                              color: isSelected ? AppTheme.primary.withValues(alpha: 0.2) : AppTheme.surfaceLight,
+                              color: isSelected ? AppTheme.primary.withValues(alpha: 0.1) : AppTheme.surfaceRaised,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: isSelected ? AppTheme.primary : Colors.transparent),
+                              border: Border.all(color: isSelected ? AppTheme.primary : AppTheme.surfaceDimmed),
                             ),
                             child: Text('$icon $label', style: TextStyle(
                               color: isSelected ? AppTheme.primary : AppTheme.textMuted, fontSize: 12,
@@ -593,20 +624,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: AppTheme.surfaceLight,
+                            color: AppTheme.surfaceRaised,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.transparent),
+                            border: Border.all(color: AppTheme.surfaceDimmed),
                           ),
-                          child: const Text('➕ Custom', style: TextStyle(
-                            color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w400,
-                          )),
+                          child: const Text('➕ Custom', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
 
-                  // Submit
                   SizedBox(
                     width: double.infinity, height: 50,
                     child: ElevatedButton.icon(
@@ -622,17 +650,15 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         final api = context.read<ApiService>();
                         try {
                           await api.addTransaction(
-                            amount: amount,
-                            direction: direction,
-                            merchant: merchantCtrl.text.trim(),
-                            category: category,
+                            amount: amount, direction: direction,
+                            merchant: merchantCtrl.text.trim(), category: category,
                             notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
                             transactionDate: DateTime.now().toIso8601String(),
                           );
                           await _loadTransactions();
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: const Text('Transaction added!'),
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Transaction added!'),
                               backgroundColor: AppTheme.success,
                             ));
                           }
@@ -647,6 +673,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primary, foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
                       ),
                     ),
                   ),
@@ -664,9 +691,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.receipt_long_rounded, size: 64, color: AppTheme.textMuted),
-          const SizedBox(height: 16),
-          const Text('No transactions found', style: TextStyle(color: AppTheme.textMuted, fontSize: 16)),
+          Container(
+            width: 72, height: 72,
+            decoration: AppTheme.neoCard(radius: 20),
+            child: const Icon(Icons.receipt_long_rounded, size: 32, color: AppTheme.textMuted),
+          ),
+          const SizedBox(height: 20),
+          const Text('No transactions found', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16, fontWeight: FontWeight.w500)),
           const SizedBox(height: 12),
           ElevatedButton.icon(
             onPressed: _showAddTransactionDialog,
@@ -674,7 +705,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             label: const Text('Add Manually'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary, foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 0,
             ),
           ),
         ],
@@ -688,17 +720,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        title: const Text('Add Custom Category', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Add Custom Category', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: ctrl,
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: AppTheme.textPrimary),
           textCapitalization: TextCapitalization.words,
           decoration: InputDecoration(
             hintText: 'e.g. Pet Care, Gaming, Freelance',
             hintStyle: const TextStyle(color: AppTheme.textMuted),
             filled: true,
-            fillColor: AppTheme.surfaceLight,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            fillColor: AppTheme.surfaceRaised,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
           ),
           autofocus: true,
         ),
@@ -711,7 +744,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             onPressed: () {
               final raw = ctrl.text.trim();
               if (raw.isNotEmpty) {
-                // Capitalize first letter of each word
                 final capitalized = raw.split(' ').map((word) {
                   if (word.isEmpty) return '';
                   return word[0].toUpperCase() + word.substring(1).toLowerCase();
@@ -721,7 +753,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 Navigator.pop(ctx);
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white, elevation: 0),
             child: const Text('Add'),
           ),
         ],

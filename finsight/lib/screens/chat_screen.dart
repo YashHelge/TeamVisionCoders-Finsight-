@@ -54,7 +54,6 @@ class _ChatScreenState extends State<ChatScreen> {
       final assistantMsg = _ChatMessage(role: 'assistant', content: '');
       setState(() => _messages.add(assistantMsg));
 
-      // Read the streaming response
       final stream = response.stream.transform(utf8.decoder);
       await for (final chunk in stream) {
         final lines = chunk.split('\n');
@@ -69,9 +68,7 @@ class _ChatScreenState extends State<ChatScreen> {
               if (data['done'] == true) {
                 setState(() => _isTyping = false);
               }
-            } catch (e) {
-              // Skip malformed JSON
-            }
+            } catch (e) {}
           }
         }
       }
@@ -80,7 +77,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _messages.add(_ChatMessage(
           role: 'assistant',
-          content: 'Unable to connect to AI service. Make sure the backend is running and GROQ_API_KEY is configured.',
+          content: 'Unable to connect to AI service. Please check that the backend is running and GROQ_API_KEY is configured.',
         ));
         _isTyping = false;
       });
@@ -122,8 +119,8 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Container(
             width: 38, height: 38,
-            decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 20),
+            decoration: AppTheme.neoCard(radius: 12),
+            child: const Icon(Icons.smart_toy_rounded, color: AppTheme.primary, size: 20),
           ),
           const SizedBox(width: 12),
           Column(
@@ -133,6 +130,16 @@ class _ChatScreenState extends State<ChatScreen> {
               const Text('Powered by Llama 3.3 70B', style: TextStyle(color: AppTheme.textMuted, fontSize: 11)),
             ],
           ),
+          const Spacer(),
+          if (_messages.isNotEmpty)
+            GestureDetector(
+              onTap: () => setState(() => _messages.clear()),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: AppTheme.neoCard(radius: 10),
+                child: const Icon(Icons.delete_outline_rounded, color: AppTheme.textMuted, size: 18),
+              ),
+            ),
         ],
       ),
     );
@@ -146,13 +153,13 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(height: 40),
           Container(
             width: 80, height: 80,
-            decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(24)),
-            child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 40),
+            decoration: AppTheme.neoCard(radius: 24),
+            child: const Icon(Icons.smart_toy_rounded, color: AppTheme.primary, size: 40),
           ).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
           const SizedBox(height: 20),
           const Text(
             'Ask me anything about\nyour finances',
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
@@ -175,14 +182,14 @@ class _ChatScreenState extends State<ChatScreen> {
         width: double.infinity,
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.surfaceLight),
-        ),
+        decoration: AppTheme.flatCard(radius: 14),
         child: Row(
           children: [
-            const Icon(Icons.auto_awesome_rounded, color: AppTheme.primary, size: 18),
+            Container(
+              width: 28, height: 28,
+              decoration: AppTheme.accentCard(color: AppTheme.primary, radius: 8),
+              child: const Icon(Icons.auto_awesome_rounded, color: AppTheme.primary, size: 14),
+            ),
             const SizedBox(width: 12),
             Expanded(child: Text(text, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14))),
             const Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
@@ -212,16 +219,27 @@ class _ChatScreenState extends State<ChatScreen> {
         decoration: BoxDecoration(
           color: isUser ? AppTheme.primary : AppTheme.surface,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isUser ? 16 : 4),
-            bottomRight: Radius.circular(isUser ? 4 : 16),
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(isUser ? 18 : 4),
+            bottomRight: Radius.circular(isUser ? 4 : 18),
           ),
-          border: isUser ? null : Border.all(color: AppTheme.surfaceLight),
+          boxShadow: [
+            if (!isUser)
+              BoxShadow(
+                color: const Color(0xFFD1D9E6).withValues(alpha: 0.4),
+                offset: const Offset(2, 2),
+                blurRadius: 8,
+              ),
+          ],
+          border: isUser ? null : Border.all(color: AppTheme.surfaceDimmed),
         ),
         child: Text(
           msg.content,
-          style: TextStyle(color: isUser ? Colors.white : AppTheme.textSecondary, fontSize: 14.5, height: 1.4),
+          style: TextStyle(
+            color: isUser ? Colors.white : AppTheme.textPrimary,
+            fontSize: 14.5, height: 1.4,
+          ),
         ),
       ),
     ).animate().fadeIn(duration: 200.ms).slideY(begin: 0.1);
@@ -234,14 +252,14 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(14)),
+            decoration: AppTheme.neoCard(radius: 14),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ...List.generate(3, (i) => Container(
                   width: 8, height: 8,
                   margin: const EdgeInsets.symmetric(horizontal: 2),
-                  decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.6), shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.5), shape: BoxShape.circle),
                 ).animate(onPlay: (c) => c.repeat(reverse: true))
                     .fadeIn(delay: (200 * i).ms)
                     .scaleXY(begin: 0.5, end: 1.0, duration: 600.ms)),
@@ -258,21 +276,25 @@ class _ChatScreenState extends State<ChatScreen> {
       padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        border: Border(top: BorderSide(color: AppTheme.surfaceLight, width: 0.5)),
+        border: Border(top: BorderSide(color: AppTheme.surfaceDimmed, width: 0.5)),
       ),
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              controller: _controller,
-              style: const TextStyle(color: Colors.white),
-              onSubmitted: _sendMessage,
-              decoration: const InputDecoration(
-                hintText: 'Ask about your finances...',
-                filled: true,
-                fillColor: AppTheme.surfaceLight,
-                border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(24)), borderSide: BorderSide.none),
-                contentPadding: EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            child: Container(
+              decoration: AppTheme.neoInset(radius: 24, color: AppTheme.surfaceRaised),
+              child: TextField(
+                controller: _controller,
+                style: const TextStyle(color: AppTheme.textPrimary),
+                onSubmitted: _sendMessage,
+                decoration: const InputDecoration(
+                  hintText: 'Ask about your finances...',
+                  hintStyle: TextStyle(color: AppTheme.textMuted),
+                  filled: true,
+                  fillColor: Colors.transparent,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(24)), borderSide: BorderSide.none),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                ),
               ),
             ),
           ),
@@ -281,7 +303,17 @@ class _ChatScreenState extends State<ChatScreen> {
             onTap: () => _sendMessage(_controller.text),
             child: Container(
               width: 46, height: 46,
-              decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(23)),
+              decoration: BoxDecoration(
+                color: AppTheme.primary,
+                borderRadius: BorderRadius.circular(23),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primary.withValues(alpha: 0.3),
+                    offset: const Offset(0, 4),
+                    blurRadius: 12,
+                  ),
+                ],
+              ),
               child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
             ),
           ),

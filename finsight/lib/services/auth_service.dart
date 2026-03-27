@@ -72,6 +72,7 @@ class AuthService extends ChangeNotifier {
         final data = jsonDecode(res.body);
         // Supabase may return user immediately or require email confirmation
         if (data['access_token'] != null) {
+          await _clearAllCaches(); // Clear any stale data from previous user
           await _saveSession(data);
           return AuthResult.success('Account created successfully!');
         } else {
@@ -97,6 +98,7 @@ class AuthService extends ChangeNotifier {
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
+        await _clearAllCaches(); // Clear stale data from previous user
         await _saveSession(data);
         return AuthResult.success('Logged in successfully!');
       } else {
@@ -108,7 +110,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Log out — clear stored session.
+  /// Log out — clear stored session and all cached data.
   Future<void> logout() async {
     // Call Supabase logout
     try {
@@ -119,10 +121,7 @@ class AuthService extends ChangeNotifier {
     } catch (_) {}
 
     await _storage.deleteAll();
-    
-    // Clear last sync timestamps and any other local prefs
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    await _clearAllCaches();
 
     _accessToken = null;
     _refreshToken = null;
@@ -130,6 +129,25 @@ class AuthService extends ChangeNotifier {
     _email = null;
     _isLoggedIn = false;
     notifyListeners();
+  }
+
+  /// Clear ALL cached app data (analytics, transactions, subscriptions, sync state).
+  /// This ensures no stale data bleeds between users.
+  Future<void> _clearAllCaches() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Remove all cached data keys
+    await prefs.remove('cached_analytics');
+    await prefs.remove('cached_txns');
+    await prefs.remove('cached_subs');
+    await prefs.remove('sms_last_sync_v2');
+    await prefs.remove('permissions_done');
+    // Clear any user-scoped keys
+    final keys = prefs.getKeys();
+    for (final key in keys) {
+      if (key.startsWith('cached_') || key.startsWith('sms_last_sync_')) {
+        await prefs.remove(key);
+      }
+    }
   }
 
   /// Save session tokens to secure storage.
@@ -154,7 +172,7 @@ class AuthService extends ChangeNotifier {
       final res = await http.get(
         Uri.parse('$_supabaseUrl/auth/v1/user'),
         headers: _authHeaders,
-      );
+      ).timeout(const Duration(seconds: 10));
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -169,7 +187,7 @@ class AuthService extends ChangeNotifier {
         Uri.parse('$_supabaseUrl/auth/v1/token?grant_type=refresh_token'),
         headers: {'Content-Type': 'application/json', 'apikey': _anonKey},
         body: jsonEncode({'refresh_token': _refreshToken}),
-      );
+      ).timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);

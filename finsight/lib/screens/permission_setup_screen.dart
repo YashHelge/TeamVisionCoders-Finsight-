@@ -26,18 +26,21 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> with Widg
       title: 'SMS Access',
       subtitle: 'Read your bank SMS to track transactions automatically',
       description: 'FinSight reads only bank and financial SMS. Personal messages are never accessed.',
+      color: AppTheme.primary,
     ),
     _PermissionStep(
       icon: Icons.notifications_active_rounded,
       title: 'Notification Access',
       subtitle: 'Capture UPI payments that don\'t send an SMS',
       description: 'Monitors only payment app notifications (PhonePe, GPay, Paytm, etc). Other app notifications are ignored.',
+      color: AppTheme.secondary,
     ),
     _PermissionStep(
       icon: Icons.battery_saver_rounded,
       title: 'Battery Optimization',
       subtitle: 'Keep FinSight running when the app is closed',
       description: 'Exempts FinSight from battery restrictions so it can capture transactions in the background.',
+      color: AppTheme.accent,
     ),
   ];
 
@@ -58,7 +61,6 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> with Widg
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _checkPermissions();
-      // Auto-advance if the current step was granted while away
       if (_isCurrentStepGranted()) {
         _nextStep();
       }
@@ -89,9 +91,7 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> with Widg
         if (status.isGranted) _nextStep();
         break;
       case 2:
-        // Battery optimization uses a special Android intent dialog
         await Permission.ignoreBatteryOptimizations.request();
-        // Re-check after the settings dialog closes
         final isGranted = await Permission.ignoreBatteryOptimizations.isGranted;
         setState(() => _batteryGranted = isGranted);
         if (isGranted) _nextStep();
@@ -131,19 +131,24 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> with Widg
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(3, (i) {
-                  return Container(
+                  final isActive = i <= _currentStep;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
                     width: i == _currentStep ? 32 : 10,
                     height: 10,
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
-                      color: i <= _currentStep ? AppTheme.primary : AppTheme.surfaceLight,
+                      color: isActive ? AppTheme.primary : AppTheme.surfaceDimmed,
                       borderRadius: BorderRadius.circular(5),
                     ),
                   );
                 }),
               ),
               const SizedBox(height: 16),
-              Text('Step ${_currentStep + 1} of 3', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+              Text(
+                'Step ${_currentStep + 1} of 3',
+                style: const TextStyle(color: AppTheme.textMuted, fontSize: 13),
+              ),
 
               const Spacer(),
 
@@ -151,26 +156,41 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> with Widg
               Container(
                 width: 100,
                 height: 100,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [BoxShadow(color: AppTheme.primary.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 8))],
-                ),
-                child: Icon(step.icon, color: Colors.white, size: 48),
+                decoration: AppTheme.neoCard(radius: 28),
+                child: Icon(step.icon, color: step.color, size: 48),
               ).animate().fadeIn(duration: 300.ms).scale(begin: const Offset(0.8, 0.8)),
               const SizedBox(height: 32),
 
               // Title & subtitle
-              Text(step.title, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppTheme.textPrimary))
-                  .animate().fadeIn(delay: 100.ms),
+              Text(
+                step.title,
+                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+              ).animate().fadeIn(delay: 100.ms),
               const SizedBox(height: 12),
-              Text(step.subtitle, textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16, color: AppTheme.primary, fontWeight: FontWeight.w500))
-                  .animate().fadeIn(delay: 200.ms),
+              Text(
+                step.subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: step.color, fontWeight: FontWeight.w500),
+              ).animate().fadeIn(delay: 200.ms),
               const SizedBox(height: 20),
-              Text(step.description, textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary, height: 1.5))
-                  .animate().fadeIn(delay: 300.ms),
+
+              // Description in a card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: AppTheme.accentCard(color: step.color, radius: 14),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: step.color, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        step.description,
+                        style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate().fadeIn(delay: 300.ms),
 
               const Spacer(),
 
@@ -180,15 +200,18 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> with Widg
                 height: 52,
                 child: ElevatedButton.icon(
                   onPressed: _isCurrentStepGranted() ? _nextStep : _requestPermission,
-                  icon: Icon(_isCurrentStepGranted() ? Icons.check_circle_rounded : Icons.security_rounded, size: 20),
+                  icon: Icon(
+                    _isCurrentStepGranted() ? Icons.check_circle_rounded : Icons.security_rounded,
+                    size: 20,
+                  ),
                   label: Text(
                     _isCurrentStepGranted() ? 'Continue' : 'Grant Permission',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _isCurrentStepGranted() ? AppTheme.success : AppTheme.primary,
+                    backgroundColor: _isCurrentStepGranted() ? AppTheme.secondary : AppTheme.primary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     elevation: 0,
                   ),
                 ),
@@ -198,7 +221,7 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> with Widg
               // Skip
               TextButton(
                 onPressed: _nextStep,
-                child: const Text('Skip for now', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                child: const Text('Skip for now', style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
               ),
             ],
           ),
@@ -213,6 +236,13 @@ class _PermissionStep {
   final String title;
   final String subtitle;
   final String description;
+  final Color color;
 
-  const _PermissionStep({required this.icon, required this.title, required this.subtitle, required this.description});
+  const _PermissionStep({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.description,
+    required this.color,
+  });
 }

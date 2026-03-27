@@ -3,10 +3,36 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
+import '../services/api_service.dart';
 import '../services/auth_service.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  bool _backendOnline = false;
+  bool _checkingHealth = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBackendHealth();
+  }
+
+  Future<void> _checkBackendHealth() async {
+    setState(() => _checkingHealth = true);
+    try {
+      final api = context.read<ApiService>();
+      await api.healthCheck();
+      if (mounted) setState(() { _backendOnline = true; _checkingHealth = false; });
+    } catch (e) {
+      if (mounted) setState(() { _backendOnline = false; _checkingHealth = false; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,27 +44,19 @@ class ProfileScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Profile', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppTheme.textPrimary))
-                    .animate().fadeIn(),
+                Text('Profile', style: Theme.of(context).textTheme.displayMedium).animate().fadeIn(),
                 const SizedBox(height: 24),
 
                 // User card
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  decoration: AppTheme.neoCard(radius: 20),
                   child: Row(
                     children: [
                       Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(Icons.person_rounded, color: Colors.white, size: 28),
+                        width: 56, height: 56,
+                        decoration: AppTheme.accentCard(color: AppTheme.primary, radius: 16),
+                        child: const Icon(Icons.person_rounded, color: AppTheme.primary, size: 28),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -47,12 +65,22 @@ class ProfileScreen extends StatelessWidget {
                           children: [
                             Text(
                               auth.email ?? 'Guest User',
-                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              auth.isLoggedIn ? 'Authenticated' : 'Not Authenticated',
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: auth.isLoggedIn ? AppTheme.secondary.withValues(alpha: 0.1) : AppTheme.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                auth.isLoggedIn ? '● Authenticated' : '○ Not Authenticated',
+                                style: TextStyle(
+                                  color: auth.isLoggedIn ? AppTheme.secondary : AppTheme.error,
+                                  fontSize: 12, fontWeight: FontWeight.w500,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -69,8 +97,8 @@ class ProfileScreen extends StatelessWidget {
                 _StatusTile(
                   icon: Icons.cloud_done_rounded,
                   title: 'Backend API',
-                  value: 'Connected',
-                  color: AppTheme.success,
+                  value: _checkingHealth ? 'Checking...' : (_backendOnline ? 'Connected' : 'Offline'),
+                  color: _checkingHealth ? AppTheme.warning : (_backendOnline ? AppTheme.secondary : AppTheme.error),
                 ).animate().fadeIn(delay: 100.ms),
                 _StatusTile(
                   icon: Icons.memory_rounded,
@@ -82,19 +110,19 @@ class ProfileScreen extends StatelessWidget {
                   icon: Icons.sync_rounded,
                   title: 'Sync Mode',
                   value: 'Realtime',
-                  color: AppTheme.accent,
+                  color: AppTheme.secondary,
                 ).animate().fadeIn(delay: 200.ms),
                 _StatusTile(
                   icon: Icons.sms_rounded,
                   title: 'SMS Capture',
                   value: 'Active',
-                  color: AppTheme.success,
+                  color: AppTheme.secondary,
                 ).animate().fadeIn(delay: 250.ms),
                 _StatusTile(
                   icon: Icons.notifications_active_rounded,
                   title: 'UPI Notification Capture',
                   value: 'Active',
-                  color: AppTheme.success,
+                  color: AppTheme.secondary,
                 ).animate().fadeIn(delay: 300.ms),
 
                 const SizedBox(height: 24),
@@ -118,10 +146,10 @@ class ProfileScreen extends StatelessWidget {
                       await auth.logout();
                     },
                     icon: const Icon(Icons.logout_rounded, size: 18),
-                    label: const Text('Sign Out'),
+                    label: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w600)),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.redAccent,
-                      side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
+                      foregroundColor: AppTheme.error,
+                      side: BorderSide(color: AppTheme.error.withValues(alpha: 0.3)),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                   ),
@@ -149,19 +177,12 @@ class _StatusTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: AppTheme.flatCard(radius: 14),
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
+            width: 36, height: 36,
+            decoration: AppTheme.accentCard(color: color, radius: 10),
             child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(width: 12),
@@ -169,7 +190,7 @@ class _StatusTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: color.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(value, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
@@ -191,10 +212,7 @@ class _InfoTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: AppTheme.flatCard(radius: 14),
       child: Row(
         children: [
           Expanded(child: Text(title, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14))),

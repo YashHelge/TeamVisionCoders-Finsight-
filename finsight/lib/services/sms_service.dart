@@ -6,7 +6,7 @@ import 'api_service.dart';
 /// and syncs them to the FinSight backend for ML classification.
 class SmsService {
   static const _channel = MethodChannel('com.finsight/sms');
-  static const _lastSyncKey = 'sms_last_sync_v2';
+  static const _lastSyncKeyPrefix = 'sms_last_sync_';
 
   final ApiService _api;
 
@@ -31,7 +31,6 @@ class SmsService {
   }
 
   /// Read bank SMS from the device inbox (last [months] months).
-  /// Returns a list of SMS maps with: sender, body, timestamp, date.
   Future<List<Map<String, dynamic>>> readSmsInbox({int months = 6}) async {
     try {
       final result = await _channel.invokeMethod<List>('readSmsInbox', {'months': months});
@@ -43,9 +42,8 @@ class SmsService {
   }
 
   /// Sync SMS from the device to the FinSight backend.
-  /// Only syncs SMS that haven't been synced before (based on timestamp).
-  /// Returns the number of new SMS synced.
-  Future<SyncResult> syncSmsToBackend({int months = 6}) async {
+  /// Uses a per-user sync key so different accounts don't share sync state.
+  Future<SyncResult> syncSmsToBackend({int months = 6, String? userId}) async {
     // Check permission first
     final hasPerms = await hasPermission();
     if (!hasPerms) {
@@ -61,9 +59,10 @@ class SmsService {
       return SyncResult(total: 0, synced: 0, error: 'No bank SMS found');
     }
 
-    // Filter only new SMS (after last sync)
+    // Filter only new SMS (after last sync) — per-user key
     final prefs = await SharedPreferences.getInstance();
-    final lastSync = prefs.getInt(_lastSyncKey) ?? 0;
+    final syncKey = userId != null ? '$_lastSyncKeyPrefix$userId' : '${_lastSyncKeyPrefix}default';
+    final lastSync = prefs.getInt(syncKey) ?? 0;
     final newSms = allSms.where((sms) {
       final ts = sms['timestamp'] as int? ?? 0;
       return ts > lastSync;
@@ -97,65 +96,17 @@ class SmsService {
         totalSynced += batch.length;
       }
 
-      // Save the latest timestamp
+      // Save the latest timestamp (per-user)
       final latestTs = newSms.map((s) => s['timestamp'] as int? ?? 0).reduce((a, b) => a > b ? a : b);
-      await prefs.setInt(_lastSyncKey, latestTs);
+      await prefs.setInt(syncKey, latestTs);
+
+      // Invalidate analytics cache on backend so fresh data is computed
+      await _api.invalidateAnalyticsCache();
     } catch (e) {
       return SyncResult(total: allSms.length, synced: totalSynced, error: e.toString());
     }
 
     return SyncResult(total: allSms.length, synced: totalSynced, error: null);
-  }
-
-  /// Extract amount from SMS body using regex patterns.
-  double _extractAmount(String body) {
-    // Match patterns like: Rs.5000, Rs 5,000.00, INR 1000, ₹500
-    final patterns = [
-      RegExp(r'(?:Rs\.?|INR|₹)\s*([\d,]+\.?\d*)', caseSensitive: false),
-      RegExp(r'([\d,]+\.?\d*)\s*(?:Rs\.?|INR|₹)', caseSensitive: false),
-      RegExp(r'(?:amount|amt)\s*(?:of|:)?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+\.?\d*)', caseSensitive: false),
-    ];
-
-    for (final pattern in patterns) {
-      final match = pattern.firstMatch(body);
-      if (match != null) {
-        final amountStr = match.group(1)!.replaceAll(',', '');
-        final amount = double.tryParse(amountStr);
-        if (amount != null && amount > 0 && amount < 10000000) {
-          return amount;
-        }
-      }
-    }
-    return 0.0;
-  }
-
-  /// Detect transaction direction from SMS body.
-  String _detectDirection(String body) {
-    final lower = body.toLowerCase();
-    final debitKeywords = ['debited', 'debit', 'withdrawn', 'sent', 'paid', 'purchase', 'spent', 'charged'];
-    final creditKeywords = ['credited', 'credit', 'received', 'deposited', 'refund', 'cashback'];
-
-    for (final kw in creditKeywords) {
-      if (lower.contains(kw)) return 'credit';
-    }
-    for (final kw in debitKeywords) {
-      if (lower.contains(kw)) return 'debit';
-    }
-    return 'debit';
-  }
-
-  /// Detect payment method from SMS body.
-  String _detectPaymentMethod(String body) {
-    final lower = body.toLowerCase();
-    if (lower.contains('upi')) return 'upi';
-    if (lower.contains('neft')) return 'neft';
-    if (lower.contains('imps')) return 'imps';
-    if (lower.contains('rtgs')) return 'rtgs';
-    if (lower.contains('nach') || lower.contains('ecs')) return 'nach';
-    if (lower.contains('atm')) return 'atm';
-    if (lower.contains('card') || lower.contains('pos')) return 'card';
-    if (lower.contains('netbank')) return 'netbanking';
-    return 'other';
   }
 }
 

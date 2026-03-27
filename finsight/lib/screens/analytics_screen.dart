@@ -42,17 +42,85 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-          : CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(child: _buildHeader()),
-                SliverToBoxAdapter(child: _buildPeriodSelector()),
-                SliverToBoxAdapter(child: _buildSummaryCards()),
-                SliverToBoxAdapter(child: _buildCategoryChart()),
-                SliverToBoxAdapter(child: _buildTopMerchants()),
-                const SliverToBoxAdapter(child: SizedBox(height: 100)),
-              ],
+          ? _buildLoadingShimmer()
+          : _analytics == null || (_analytics!.totalIncome == 0 && _analytics!.totalExpense == 0)
+              ? _buildEmpty()
+              : RefreshIndicator(
+                  onRefresh: _loadAnalytics,
+                  color: AppTheme.primary,
+                  child: CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(child: _buildHeader()),
+                      SliverToBoxAdapter(child: _buildPeriodSelector()),
+                      SliverToBoxAdapter(child: _buildSummaryCards()),
+                      SliverToBoxAdapter(child: _buildCategoryChart()),
+                      SliverToBoxAdapter(child: _buildTopMerchants()),
+                      const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                    ],
+                  ),
+                ),
+    );
+  }
+
+  Widget _buildLoadingShimmer() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 16),
+          Container(width: 120, height: 28, decoration: AppTheme.neoInset(radius: 8)),
+          const SizedBox(height: 16),
+          Row(children: List.generate(4, (i) => Expanded(
+            child: Container(margin: const EdgeInsets.symmetric(horizontal: 4), height: 40, decoration: AppTheme.neoCard(radius: 10)),
+          ))),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: Container(height: 80, decoration: AppTheme.neoCard(radius: 14))),
+            const SizedBox(width: 12),
+            Expanded(child: Container(height: 80, decoration: AppTheme.neoCard(radius: 14))),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: Container(height: 80, decoration: AppTheme.neoCard(radius: 14))),
+            const SizedBox(width: 12),
+            Expanded(child: Container(height: 80, decoration: AppTheme.neoCard(radius: 14))),
+          ]),
+          const SizedBox(height: 16),
+          Container(height: 260, decoration: AppTheme.neoCard(radius: 16)),
+        ],
+      ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 1200.ms, color: AppTheme.surfaceDimmed.withValues(alpha: 0.5)),
+    );
+  }
+
+  Widget _buildEmpty() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 72, height: 72,
+            decoration: AppTheme.neoCard(radius: 20),
+            child: const Icon(Icons.analytics_rounded, size: 32, color: AppTheme.textMuted),
+          ),
+          const SizedBox(height: 20),
+          const Text('No analytics yet', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 8),
+          const Text('Sync your transactions to see\nspending insights here.',
+            style: TextStyle(color: AppTheme.textMuted, fontSize: 13), textAlign: TextAlign.center),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: _loadAnalytics,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Refresh'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary, foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 0,
             ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -66,29 +134,33 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Widget _buildPeriodSelector() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Row(
-        children: ['7d', '30d', '90d', '1y'].map((p) {
-          final selected = p == _period;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () { setState(() => _period = p); _loadAnalytics(); },
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: selected ? AppTheme.primary : AppTheme.surfaceLight,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(p.toUpperCase(), style: TextStyle(
-                    color: selected ? Colors.white : AppTheme.textMuted,
-                    fontWeight: FontWeight.w600, fontSize: 13,
-                  )),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: AppTheme.neoInset(radius: 14),
+        child: Row(
+          children: ['7d', '30d', '90d', '1y'].map((p) {
+            final selected = p == _period;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () { setState(() => _period = p); _loadAnalytics(); },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.all(2),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: selected
+                      ? AppTheme.neoCard(radius: 10, color: AppTheme.surface)
+                      : null,
+                  child: Center(
+                    child: Text(p.toUpperCase(), style: TextStyle(
+                      color: selected ? AppTheme.primary : AppTheme.textMuted,
+                      fontWeight: FontWeight.w600, fontSize: 13,
+                    )),
+                  ),
                 ),
               ),
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -111,12 +183,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              _summaryCard('Savings', '${_analytics!.savingsRate.toStringAsFixed(1)}%', AppTheme.success, Icons.savings_rounded),
+              _summaryCard('Savings', '${_analytics!.savingsRate.toStringAsFixed(1)}%', AppTheme.secondary, Icons.savings_rounded),
               const SizedBox(width: 12),
               _summaryCard(
                 '7d Forecast',
                 _analytics!.forecast7d != null ? fmt.format(_analytics!.forecast7d!) : 'N/A',
-                AppTheme.warning, Icons.trending_up_rounded,
+                AppTheme.accent, Icons.trending_up_rounded,
               ),
             ],
           ),
@@ -129,16 +201,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
+        decoration: AppTheme.neoCard(radius: 16),
         child: Row(
           children: [
             Container(
               width: 36, height: 36,
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+              decoration: AppTheme.accentCard(color: color, radius: 10),
               child: Icon(icon, color: color, size: 18),
             ),
             const SizedBox(width: 12),
@@ -146,9 +214,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  Text(label, style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
                   const SizedBox(height: 2),
-                  Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(value, style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 15)),
                 ],
               ),
             ),
@@ -166,15 +234,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.surfaceLight),
-      ),
+      decoration: AppTheme.neoCard(radius: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Spending by Category', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+          const Text('Spending by Category', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 20),
           SizedBox(
             height: 200,
@@ -203,16 +267,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             final color = AppTheme.getCategoryColor(e.key);
             final pct = total > 0 ? (e.value / total * 100) : 0.0;
             return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(vertical: 5),
               child: Row(
                 children: [
                   Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
                   const SizedBox(width: 8),
                   Text('$icon $label', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
                   const Spacer(),
-                  Text('₹${NumberFormat('#,##0').format(e.value)}', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                  Text('₹${NumberFormat('#,##0').format(e.value)}', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
                   const SizedBox(width: 8),
-                  Text('${pct.toStringAsFixed(1)}%', style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                    child: Text('${pct.toStringAsFixed(1)}%', style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w500)),
+                  ),
                 ],
               ),
             );
@@ -228,15 +296,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.surfaceLight),
-      ),
+      decoration: AppTheme.neoCard(radius: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Top Merchants', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+          const Text('Top Merchants', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 14),
           ..._analytics!.topMerchants.take(5).toList().asMap().entries.map((entry) {
             final i = entry.key;
@@ -250,12 +314,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 children: [
                   Row(
                     children: [
-                      CircleAvatar(
-                        radius: 16, backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
-                        child: Text('${i + 1}', style: const TextStyle(color: AppTheme.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+                      Container(
+                        width: 28, height: 28,
+                        decoration: AppTheme.accentCard(color: AppTheme.primary, radius: 8),
+                        child: Center(child: Text('${i + 1}', style: const TextStyle(color: AppTheme.primary, fontSize: 12, fontWeight: FontWeight.bold))),
                       ),
                       const SizedBox(width: 12),
-                      Expanded(child: Text(m['merchant'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 14))),
+                      Expanded(child: Text(m['merchant'] ?? '', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14))),
                       Text('₹${NumberFormat('#,##0').format(amt)}', style: const TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
                     ],
                   ),
@@ -264,8 +329,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
                       value: maxAmt > 0 ? amt / maxAmt : 0,
-                      backgroundColor: AppTheme.surfaceLight,
-                      valueColor: AlwaysStoppedAnimation(AppTheme.primary.withValues(alpha: 0.6)),
+                      backgroundColor: AppTheme.surfaceDimmed,
+                      valueColor: AlwaysStoppedAnimation(AppTheme.primary.withValues(alpha: 0.5)),
                       minHeight: 4,
                     ),
                   ),

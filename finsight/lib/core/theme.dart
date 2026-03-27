@@ -2,75 +2,145 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // ── Brand Colors ──
-  static const Color primary = Color(0xFF6C63FF);
-  static const Color primaryDark = Color(0xFF5A52D5);
-  static const Color secondary = Color(0xFF00D9A6);
-  static const Color accent = Color(0xFFFF6B6B);
-  static const Color background = Color(0xFF0A0E21);
-  static const Color surface = Color(0xFF1D1F33);
-  static const Color surfaceLight = Color(0xFF252840);
-  static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFFB0B3C5);
-  static const Color textMuted = Color(0xFF6C7293);
-  static const Color success = Color(0xFF00E676);
-  static const Color warning = Color(0xFFFFAB40);
-  static const Color error = Color(0xFFFF5252);
-  static const Color income = Color(0xFF00E676);
-  static const Color expense = Color(0xFFFF5252);
+  // ── Premium Light Palette ──
+  static const Color primary = Color(0xFF6C5CE7);      // Rich violet
+  static const Color primaryLight = Color(0xFF8B7FF0);  // Light violet
+  static const Color primaryDark = Color(0xFF5A4BD1);   // Deep violet
+  static const Color secondary = Color(0xFF00B894);     // Emerald green
+  static const Color accent = Color(0xFFE17055);        // Warm coral
+
+  // ── Light backgrounds ──
+  static const Color background = Color(0xFFF0F2F8);   // Soft cool grey
+  static const Color surface = Color(0xFFFFFFFF);       // Pure white cards
+  static const Color surfaceRaised = Color(0xFFF7F8FC); // Slightly elevated
+  static const Color surfaceDimmed = Color(0xFFE8EAF0); // Inset/pressed
+
+  // ── Text ──
+  static const Color textPrimary = Color(0xFF1A1D2E);   // Near-black
+  static const Color textSecondary = Color(0xFF5A5F7A);  // Muted grey-blue
+  static const Color textMuted = Color(0xFF9BA0B5);      // Subtle hint
+
+  // ── Semantic ──
+  static const Color success = Color(0xFF00B894);
+  static const Color warning = Color(0xFFFDAA33);
+  static const Color error = Color(0xFFE74C3C);
+  static const Color income = Color(0xFF00B894);
+  static const Color expense = Color(0xFFE74C3C);
 
   // ── Category Colors ──
   static const Map<String, Color> categoryColors = {
-    'food_dining': Color(0xFFFF6B6B),
-    'shopping': Color(0xFF6C63FF),
-    'transport': Color(0xFF00D9A6),
-    'entertainment': Color(0xFFFFAB40),
-    'utilities': Color(0xFF26C6DA),
-    'health': Color(0xFFEF5350),
-    'education': Color(0xFF42A5F5),
-    'travel': Color(0xFFAB47BC),
-    'groceries': Color(0xFF66BB6A),
-    'rent_emi': Color(0xFFFF7043),
-    'investment': Color(0xFF29B6F6),
-    'insurance': Color(0xFF78909C),
-    'salary': Color(0xFF00E676),
-    'income': Color(0xFF00E676),
-    'subscriptions': Color(0xFFEC407A),
-    'finance': Color(0xFF5C6BC0),
-    'telecom': Color(0xFF26A69A),
-    'uncategorized': Color(0xFF78909C),
+    'food_dining': Color(0xFFE17055),
+    'shopping': Color(0xFF6C5CE7),
+    'transport': Color(0xFF00B894),
+    'entertainment': Color(0xFFFDAA33),
+    'utilities': Color(0xFF00CEC9),
+    'health': Color(0xFFE74C3C),
+    'education': Color(0xFF0984E3),
+    'travel': Color(0xFF9B59B6),
+    'groceries': Color(0xFF27AE60),
+    'rent_emi': Color(0xFFD35400),
+    'investment': Color(0xFF0984E3),
+    'insurance': Color(0xFF7F8C8D),
+    'salary': Color(0xFF00B894),
+    'income': Color(0xFF00B894),
+    'subscriptions': Color(0xFFE84393),
+    'finance': Color(0xFF5B6ABF),
+    'telecom': Color(0xFF1ABC9C),
+    'uncategorized': Color(0xFF95A5A6),
   };
 
   static Color getCategoryColor(String category) {
     return categoryColors[category.toLowerCase()] ?? textMuted;
   }
 
-  // ── Gradients ──
-  static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF6C63FF), Color(0xFF00D9A6)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  // ── Neomorphic Decorations ──
+  /// Raised neomorphic card — appears "popped out" with highlight & shadow
+  static BoxDecoration neoCard({
+    double radius = 20,
+    Color? color,
+  }) {
+    final base = color ?? surface;
+    return BoxDecoration(
+      color: base,
+      borderRadius: BorderRadius.circular(radius),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0xFFD1D9E6).withValues(alpha: 0.7),
+          offset: const Offset(6, 6),
+          blurRadius: 15,
+        ),
+        const BoxShadow(
+          color: Colors.white,
+          offset: Offset(-6, -6),
+          blurRadius: 15,
+        ),
+      ],
+    );
+  }
 
-  static const LinearGradient incomeGradient = LinearGradient(
-    colors: [Color(0xFF00E676), Color(0xFF00BFA5)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  /// Pressed/inset neomorphic — appears "pushed in"
+  static BoxDecoration neoInset({
+    double radius = 16,
+    Color? color,
+  }) {
+    final base = color ?? surfaceDimmed;
+    return BoxDecoration(
+      color: base,
+      borderRadius: BorderRadius.circular(radius),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0xFFD1D9E6).withValues(alpha: 0.5),
+          offset: const Offset(3, 3),
+          blurRadius: 6,
+          spreadRadius: -2,
+        ),
+        const BoxShadow(
+          color: Colors.white,
+          offset: Offset(-3, -3),
+          blurRadius: 6,
+          spreadRadius: -2,
+        ),
+      ],
+    );
+  }
 
-  static const LinearGradient expenseGradient = LinearGradient(
-    colors: [Color(0xFFFF5252), Color(0xFFFF6B6B)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  /// Subtle flat card — no heavy shadows, just border
+  static BoxDecoration flatCard({
+    double radius = 16,
+    Color? borderColor,
+  }) {
+    return BoxDecoration(
+      color: surface,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: borderColor ?? const Color(0xFFE8EAF0),
+        width: 1,
+      ),
+    );
+  }
+
+  /// Accent card with color tint
+  static BoxDecoration accentCard({
+    required Color color,
+    double radius = 16,
+  }) {
+    return BoxDecoration(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: color.withValues(alpha: 0.15),
+        width: 1,
+      ),
+    );
+  }
 
   // ── Theme Data ──
-  static ThemeData get darkTheme {
+  static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       scaffoldBackgroundColor: background,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         primary: primary,
         secondary: secondary,
         surface: surface,
@@ -91,6 +161,7 @@ class AppTheme {
       appBarTheme: AppBarTheme(
         backgroundColor: background,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: GoogleFonts.inter(
           color: textPrimary,
@@ -102,7 +173,7 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: surface,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: surface,
@@ -114,21 +185,36 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
-          foregroundColor: textPrimary,
+          foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surfaceLight,
+        fillColor: surfaceRaised,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: surfaceDimmed),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: surfaceDimmed),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: primary, width: 1.5),
         ),
         hintStyle: const TextStyle(color: textMuted),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: surfaceRaised,
+        selectedColor: primary.withValues(alpha: 0.12),
+        labelStyle: const TextStyle(color: textSecondary, fontSize: 13),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        side: BorderSide(color: surfaceDimmed),
       ),
     );
   }
