@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme.dart';
 import '../core/constants.dart';
@@ -28,19 +30,48 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() { _loading = true; _error = null; });
     final api = context.read<ApiService>();
+    final prefs = await SharedPreferences.getInstance();
+    if (_analytics == null && _recentTxns.isEmpty) {
+      final cachedAnalytics = prefs.getString('cached_analytics');
+      final cachedTxn = prefs.getString('cached_txns');
+      if (cachedAnalytics != null && cachedTxn != null) {
+        try {
+          final analyticsRes = jsonDecode(cachedAnalytics);
+          final txnRes = jsonDecode(cachedTxn);
+          final txns = txnRes['transactions'] as List? ?? [];
+          setState(() {
+            _analytics = analyticsRes;
+            _recentTxns = txns.map((t) => TransactionModel.fromJson(t)).toList();
+            _loading = false;
+          });
+        } catch (_) {}
+      }
+    }
+
+    if (_analytics == null) {
+      setState(() { _loading = true; _error = null; });
+    }
+
     try {
       final analyticsRes = await api.getAnalytics(period: '30d');
       final txnRes = await api.getTransactions(pageSize: 5);
-      setState(() {
-        _analytics = analyticsRes;
-        final txns = txnRes['transactions'] as List? ?? [];
-        _recentTxns = txns.map((t) => TransactionModel.fromJson(t)).toList();
-        _loading = false;
-      });
+
+      await prefs.setString('cached_analytics', jsonEncode(analyticsRes));
+      await prefs.setString('cached_txns', jsonEncode(txnRes));
+
+      if (mounted) {
+        setState(() {
+          _analytics = analyticsRes;
+          final txns = txnRes['transactions'] as List? ?? [];
+          _recentTxns = txns.map((t) => TransactionModel.fromJson(t)).toList();
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() { _error = 'Connect your backend to see live data'; _loading = false; });
+      if (mounted && _analytics == null) {
+        setState(() { _error = 'Connect your backend to see live data'; _loading = false; });
+      }
     }
   }
 

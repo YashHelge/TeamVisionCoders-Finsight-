@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme.dart';
 import '../services/api_service.dart';
@@ -28,20 +30,46 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   }
 
   Future<void> _loadSubscriptions() async {
-    setState(() => _loading = true);
+    final api = context.read<ApiService>();
+    final prefs = await SharedPreferences.getInstance();
+    if (_subs.isEmpty) {
+      final cached = prefs.getString('cached_subs');
+      if (cached != null) {
+        try {
+          final res = jsonDecode(cached);
+          final subList = (res['subscriptions'] as List? ?? []).map((s) => SubscriptionModel.fromJson(s)).toList();
+          setState(() {
+            _subs = subList;
+            _totalMonthly = (res['total_monthly_cost'] ?? 0).toDouble();
+            _totalAnnual = (res['total_annual_cost'] ?? 0).toDouble();
+            _activeCount = res['active_count'] ?? 0;
+            _loading = false;
+          });
+        } catch (_) {}
+      }
+    }
+
+    if (_subs.isEmpty) {
+      setState(() => _loading = true);
+    }
+    
     try {
-      final api = context.read<ApiService>();
       final res = await api.getSubscriptions();
+      
+      await prefs.setString('cached_subs', jsonEncode(res));
+      
       final subList = (res['subscriptions'] as List? ?? []).map((s) => SubscriptionModel.fromJson(s)).toList();
-      setState(() {
-        _subs = subList;
-        _totalMonthly = (res['total_monthly_cost'] ?? 0).toDouble();
-        _totalAnnual = (res['total_annual_cost'] ?? 0).toDouble();
-        _activeCount = res['active_count'] ?? 0;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _subs = subList;
+          _totalMonthly = (res['total_monthly_cost'] ?? 0).toDouble();
+          _totalAnnual = (res['total_annual_cost'] ?? 0).toDouble();
+          _activeCount = res['active_count'] ?? 0;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _loading = false);
+      if (mounted && _subs.isEmpty) setState(() => _loading = false);
     }
   }
 

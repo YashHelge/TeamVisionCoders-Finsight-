@@ -212,22 +212,6 @@ class _AuthScreenState extends State<AuthScreen> {
                     ],
                   ).animate().fadeIn(delay: 650.ms),
 
-                  const SizedBox(height: 32),
-
-                  // Demo mode
-                  OutlinedButton.icon(
-                    onPressed: _loading ? null : () {
-                      widget.onAuthSuccess();
-                    },
-                    icon: const Icon(Icons.science_rounded, size: 18),
-                    label: const Text('Continue in Demo Mode'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.textSecondary,
-                      side: BorderSide(color: AppTheme.surfaceLight),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ).animate().fadeIn(delay: 750.ms),
                 ],
               ),
             ),

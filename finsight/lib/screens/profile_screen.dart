@@ -46,12 +46,12 @@ class ProfileScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              auth.email ?? 'Demo User',
+                              auth.email ?? 'Guest User',
                               style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              auth.isLoggedIn ? 'Authenticated' : 'Demo Mode',
+                              auth.isLoggedIn ? 'Authenticated' : 'Not Authenticated',
                               style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
                             ),
                           ],
@@ -118,7 +118,7 @@ class ProfileScreen extends StatelessWidget {
                       await auth.logout();
                     },
                     icon: const Icon(Icons.logout_rounded, size: 18),
-                    label: Text(auth.isLoggedIn ? 'Sign Out' : 'Exit Demo Mode'),
+                    label: const Text('Sign Out'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.redAccent,
                       side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),

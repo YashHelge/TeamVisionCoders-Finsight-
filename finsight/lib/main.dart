@@ -21,7 +21,18 @@ void main() {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()..init()),
-        Provider(create: (_) => ApiService()),
+        ProxyProvider<AuthService, ApiService>(
+          create: (_) => ApiService(),
+          update: (_, auth, api) {
+            final apiService = api ?? ApiService();
+            if (auth.accessToken != null) {
+              apiService.setToken(auth.accessToken!);
+            } else {
+              apiService.setToken('');
+            }
+            return apiService;
+          },
+        ),
       ],
       child: const FinSightApp(),
     ),
@@ -65,12 +76,6 @@ class _AppEntryState extends State<AppEntry> {
   }
 
   void _onAuthSuccess() {
-    // After auth, update API token if logged in
-    final auth = context.read<AuthService>();
-    final api = context.read<ApiService>();
-    if (auth.accessToken != null) {
-      api.setToken(auth.accessToken!);
-    }
     setState(() {}); // Rebuild to show permissions or main nav
   }
 

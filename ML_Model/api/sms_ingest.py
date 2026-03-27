@@ -216,8 +216,9 @@ async def ingest_sms(
 
             amount = extract_amount(sms.body)
 
-            # Skip zero-amount or no-amount SMS
-            if not amount or amount <= 0:
+            # Keep SMS even if amount is missing, LLM will attempt to extract it later.
+            # Only skip if it's explicitly 0.0
+            if amount is not None and amount <= 0:
                 skipped += 1
                 continue
 
@@ -285,8 +286,24 @@ async def ingest_sms(
                         t["merchant"] = res["merchant"]
                     if res.get("category") and res.get("category").lower() != "uncategorized":
                         t["category"] = res["category"].lower().replace(' ', '_')
+                    if res.get("amount") is not None:
+                        try:
+                            t["amount"] = float(res["amount"])
+                        except (ValueError, TypeError):
+                            pass
+                    if res.get("direction"):
+                        t["direction"] = res["direction"]
             except Exception as e:
                 logger.error(f"Batch LLM extraction failed: {e}", exc_info=True)
+
+        # Filter out transactions that still have no valid amount after LLM
+        final_txns = []
+        for t in valid_txns:
+            if t["amount"] is None or t["amount"] <= 0:
+                skipped += 1
+            else:
+                final_txns.append(t)
+        valid_txns = final_txns
 
         # === Phase 3: DB Insertion ===
         async with db_pool.acquire() as conn:

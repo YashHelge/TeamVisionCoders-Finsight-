@@ -2,7 +2,6 @@ class AppConstants {
   // API
   static const String baseUrl =
       'http://10.211.103.83:8080/api/v1'; // Android emulator localhost
-  static const String demoToken = 'demo-token';
 
   // Supabase Auth
   static const String supabaseUrl = 'http://10.211.103.83:8002';
