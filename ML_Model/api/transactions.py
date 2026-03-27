@@ -1,0 +1,212 @@
+"""
+Transactions API — CRUD with pagination, filtering, and category correction.
+"""
+
+import logging
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
+
+from api.auth import CurrentUser, get_current_user
+
+router = APIRouter()
+logger = logging.getLogger("finsight.transactions")
+
+
+class TransactionModel(BaseModel):
+    id: Optional[str] = None
+    user_id: Optional[str] = None
+    fingerprint: Optional[str] = None
+    amount: float
+    direction: str  # credit | debit
+    merchant: str
+    merchant_raw: Optional[str] = None
+    bank: Optional[str] = None
+    payment_method: Optional[str] = None
+    upi_ref: Optional[str] = None
+    account_last4: Optional[str] = None
+    transaction_date: str
+    balance_after: Optional[float] = None
+    source: str = "sms"  # sms | notification | merged | dataset
+    category: str = "uncategorized"
+    category_confidence: Optional[float] = None
+    rl_adjusted: bool = False
+    fraud_score: float = 0.0
+    anomaly_score: float = 0.0
+    is_subscription: bool = False
+    sync_mode: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class TransactionListResponse(BaseModel):
+    transactions: List[TransactionModel]
+    total: int
+    page: int
+    page_size: int
+    has_more: bool
+
+
+class CategoryCorrectionRequest(BaseModel):
+    transaction_id: str
+    old_category: str
+    new_category: str
+
+
+@router.get("/transactions", response_model=TransactionListResponse)
+async def list_transactions(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    category: Optional[str] = None,
+    direction: Optional[str] = None,
+    merchant: Optional[str] = None,
+    source: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    search: Optional[str] = None,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Paginated transaction list with filters."""
+    db_pool = request.app.state.db_pool
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    offset = (page - 1) * page_size
+    conditions = ["user_id = $1"]
+    params: list = [user.user_id]
+    idx = 2
+
+    if category:
+        conditions.append(f"category = ${idx}")
+        params.append(category)
+        idx += 1
+    if direction:
+        conditions.append(f"direction = ${idx}")
+        params.append(direction)
+        idx += 1
+    if merchant:
+        conditions.append(f"merchant ILIKE ${idx}")
+        params.append(f"%{merchant}%")
+        idx += 1
+    if source:
+        conditions.append(f"source = ${idx}")
+        params.append(source)
+        idx += 1
+    if date_from:
+        conditions.append(f"transaction_date >= ${idx}::timestamptz")
+        params.append(date_from)
+        idx += 1
+    if date_to:
+        conditions.append(f"transaction_date <= ${idx}::timestamptz")
+        params.append(date_to)
+        idx += 1
+    if search:
+        conditions.append(f"(merchant ILIKE ${idx} OR merchant_raw ILIKE ${idx})")
+        params.append(f"%{search}%")
+        idx += 1
+
+    where = " AND ".join(conditions)
+
+    try:
+        async with db_pool.acquire() as conn:
+            count_query = f"SELECT COUNT(*) FROM transactions WHERE {where}"
+            total = await conn.fetchval(count_query, *params)
+
+            data_query = f"""
+                SELECT * FROM transactions 
+                WHERE {where}
+                ORDER BY transaction_date DESC
+                LIMIT ${idx} OFFSET ${idx + 1}
+            """
+            params.extend([page_size, offset])
+            rows = await conn.fetch(data_query, *params)
+
+        transactions = [TransactionModel(**dict(r)) for r in rows]
+        return TransactionListResponse(
+            transactions=transactions,
+            total=total,
+            page=page,
+            page_size=page_size,
+            has_more=(offset + page_size) < total,
+        )
+
+    except Exception as e:
+        logger.error("Transaction list failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch transactions")
+
+
+@router.get("/transactions/{transaction_id}", response_model=TransactionModel)
+async def get_transaction(
+    request: Request,
+    transaction_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get a single transaction by ID."""
+    db_pool = request.app.state.db_pool
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    try:
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM transactions WHERE id = $1 AND user_id = $2",
+                transaction_id, user.user_id,
+            )
+        if not row:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        return TransactionModel(**dict(row))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Transaction fetch failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch transaction")
+
+
+@router.post("/transactions/correct-category")
+async def correct_category(
+    request: Request,
+    body: CategoryCorrectionRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """
+    User corrects a transaction category — feeds RL reward signal.
+    Old category gets -1.0 reward, new category gets +1.0 reward.
+    """
+    db_pool = request.app.state.db_pool
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    try:
+        async with db_pool.acquire() as conn:
+            # Update the transaction category
+            result = await conn.execute(
+                """UPDATE transactions 
+                   SET category = $1, rl_adjusted = TRUE 
+                   WHERE id = $2 AND user_id = $3""",
+                body.new_category, body.transaction_id, user.user_id,
+            )
+            if result == "UPDATE 0":
+                raise HTTPException(status_code=404, detail="Transaction not found")
+
+            # Record feedback event for RL
+            await conn.execute(
+                """INSERT INTO feedback_events 
+                   (user_id, event_type, target_id, old_value, new_value, reward)
+                   VALUES ($1, 'category_correction', $2::uuid, $3, $4, -1.0)""",
+                user.user_id, body.transaction_id, body.old_category, body.new_category,
+            )
+            await conn.execute(
+                """INSERT INTO feedback_events 
+                   (user_id, event_type, target_id, old_value, new_value, reward)
+                   VALUES ($1, 'category_correction', $2::uuid, $3, $4, 1.0)""",
+                user.user_id, body.transaction_id, body.old_category, body.new_category,
+            )
+
+        return {"status": "corrected", "transaction_id": body.transaction_id, "new_category": body.new_category}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Category correction failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to correct category")

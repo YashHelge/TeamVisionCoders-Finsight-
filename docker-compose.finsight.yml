@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  # ── FinSight Backend API ──
+  finsight-api:
+    build:
+      context: ../ML_Model
+      dockerfile: Dockerfile
+    container_name: finsight-api
+    ports:
+      - "8080:8080"
+    env_file:
+      - ../ML_Model/.env
+    environment:
+      - SUPABASE_URL=http://kong:8000
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://supabase_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+    depends_on:
+      - db
+      - redis
+    networks:
+      - supabase_network
+    restart: unless-stopped
+
+  # ── Redis (caching, Bloom filters, RL state) ──
+  redis:
+    image: redis:7-alpine
+    container_name: finsight-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - supabase_network
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+
+
+networks:
+  supabase_network:
+    external: true

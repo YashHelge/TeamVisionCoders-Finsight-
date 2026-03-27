@@ -1,0 +1,43 @@
+# ── Core ──
+fastapi
+uvicorn[standard]
+gunicorn
+pydantic
+pydantic-settings
+python-multipart
+python-dotenv
+
+# ── Database ──
+asyncpg
+supabase
+sqlalchemy[asyncio]
+
+# ── Redis ──
+redis
+
+# ── ML / Data Science ──
+scikit-learn
+xgboost
+joblib
+numpy
+scipy
+pandas
+
+# ── Subscription Intelligence ──
+hdbscan
+sentence-transformers
+rapidfuzz
+
+# ── NLP ──
+# TF-IDF handled by scikit-learn
+
+# ── Groq AI ──
+groq
+httpx
+
+
+# ── Utilities ──
+python-jose[cryptography]
+passlib[bcrypt]
+sse-starlette
+orjson

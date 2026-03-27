@@ -1,0 +1,50 @@
+name: finsight
+description: "FinSight — AI-Powered Personal Finance Intelligence"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  
+  # HTTP & API
+  http: ^1.3.0
+  dio: ^5.7.0
+  
+  # State Management
+  provider: ^6.1.2
+  
+  # Storage
+  shared_preferences: ^2.3.0
+  flutter_secure_storage: ^9.2.4
+  sqflite: ^2.4.1
+  path: ^1.9.1
+  
+  # Charts & Visualization
+  fl_chart: ^0.70.2
+  
+  # UI
+  google_fonts: ^6.2.1
+  shimmer: ^3.0.0
+  lottie: ^3.2.0
+  flutter_animate: ^4.5.2
+  
+  # Utilities
+  intl: ^0.19.0
+  uuid: ^4.5.1
+  crypto: ^3.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/
