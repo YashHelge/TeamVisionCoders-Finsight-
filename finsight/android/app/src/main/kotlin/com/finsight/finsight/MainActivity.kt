@@ -156,21 +156,22 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun isBankSms(sender: String, body: String): Boolean {
+        // Since the FinSight backend now has a highly robust ML & LLM pipeline 
+        // for transaction filtering, we should be extremely permissive here on the device 
+        // to avoid accidentally dropping valid financial SMS.
+        
+        // 1. If it has a shortcode or structured sender format (typical for businesses/banks)
         val upper = sender.uppercase()
-        // Check sender matches known bank patterns
-        val senderMatch = BANK_SENDERS.any { upper.contains(it) } ||
-            upper.matches(Regex(".*[A-Z]{2}-[A-Z]{4,6}.*"))
+        val isShortCode = upper.matches(Regex(".*[A-Z]{2}-[A-Z0-9]{4,6}.*")) || sender.length <= 8
+        if (isShortCode) return true
 
-        if (senderMatch) return true
-
-        // Fallback: check body for financial keywords (catches UPI app SMS)
+        // 2. Or if it mentions any money/financial concept
         val lowerBody = body.lowercase()
         val financialKeywords = listOf(
-            "debited", "credited", "a/c", "acct", "account",
-            "upi", "neft", "imps", "rtgs", "bal ",
-            "rs.", "rs ", "inr", "₹",
-            "transaction", "transferred",
+            "debited", "credited", "a/c", "acct", "account", "bal", "balance",
+            "upi", "neft", "imps", "rtgs", "paid", "sent", "received", "spent",
+            "rs", "inr", "₹", "$", "usd", "txn", "transaction", "transfer", "deducted"
         )
-        return financialKeywords.count { lowerBody.contains(it) } >= 2
+        return financialKeywords.any { lowerBody.contains(it) }
     }
 }
